@@ -12,22 +12,22 @@ const logger = require('../logger');
 const COMPETITORS = [
   {
     name: 'E签宝',
-    keywords: ['E签宝 融资', 'E签宝 新功能', 'E签宝 合作', 'E签宝 产品更新', 'E签宝 中标'],
+    keywords: ['E签宝 最新动态', 'E签宝 融资合作'],
     officialSite: 'https://www.esign.cn',
   },
   {
     name: '法大大',
-    keywords: ['法大大 融资', '法大大 新功能', '法大大 合作', '法大大 产品更新', '法大大 中标'],
+    keywords: ['法大大 最新动态', '法大大 融资合作'],
     officialSite: 'https://www.fadada.com',
   },
   {
     name: '契约锁',
-    keywords: ['契约锁 融资', '契约锁 新功能', '契约锁 合作', '契约锁 产品更新', '契约锁 中标'],
+    keywords: ['契约锁 最新动态', '契约锁 融资合作'],
     officialSite: 'https://www.qiyuesuo.com',
   },
   {
     name: '腾讯电子签',
-    keywords: ['腾讯电子签 新功能', '腾讯电子签 合作', '腾讯电子签 产品', '腾讯电子签 更新'],
+    keywords: ['腾讯电子签 最新动态', '腾讯电子签 产品更新'],
     officialSite: 'https://qian.qq.com',
   },
 ];
@@ -94,7 +94,7 @@ async function collectCompetitor() {
   for (const comp of COMPETITORS) {
     for (const kw of comp.keywords) {
       try {
-        const items = await searchBaiduCompetitor(kw, 6);
+        const items = await searchBaiduCompetitor(kw, 5);
 
         for (const item of items) {
           const existing = db.queryOne('SELECT id FROM competitor_news WHERE title=?', [item.title]);
@@ -111,7 +111,7 @@ async function collectCompetitor() {
           totalCount++;
         }
 
-        await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+        await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
       } catch (err) {
         logger.error(`采集竞品[${comp.name}][${kw}]异常: ${err.message}`);
       }
