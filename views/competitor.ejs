@@ -35,6 +35,10 @@
         <option value="契约锁">契约锁</option>
         <option value="腾讯电子签">腾讯电子签</option>
       </select>
+      <select id="sortBy" onchange="loadCompetitor()">
+        <option value="collect">按采集时间</option>
+        <option value="publish">按发布时间</option>
+      </select>
     </div>
     <div class="card">
       <div class="card-body" id="competitorList"><p class="empty-text">加载中...</p></div>
