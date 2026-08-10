@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>政策法规 - IntelliSign Radar</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-brand"><div class="brand-text">IntelliSign<small>Radar</small></div></div>
+    <nav class="sidebar-nav">
+      <a href="/" class="nav-item">总览仪表盘</a>
+      <a href="/policy" class="nav-item active">政策法规</a>
+      <a href="/competitor" class="nav-item">竞品动态</a>
+      <a href="/partner" class="nav-item">生态伙伴</a>
+      <a href="/briefs" class="nav-item">情报简报</a>
+      <a href="/collect-logs" class="nav-item">采集日志</a>
+      <a href="/settings" class="nav-item">系统设置</a>
+    </nav>
+    <div class="sidebar-footer"><small>IntelliSign Radar v1.0</small></div>
+  </aside>
+  <main class="main-content">
+    <header class="page-header">
+      <h1>政策法规监控</h1>
+      <div class="header-actions">
+        <button class="btn btn-primary" onclick="triggerCollect('policy')">采集政策法规</button>
+      </div>
+    </header>
+    <div class="filter-bar">
+      <select id="filterSeverity" onchange="loadPolicy()">
+        <option value="">全部级别</option>
+        <option value="high">高危</option>
+        <option value="medium">中等</option>
+        <option value="info">一般</option>
+      </select>
+      <input type="text" id="filterKeyword" placeholder="搜索关键词..." onkeyup="if(event.key==='Enter')loadPolicy()">
+      <button class="btn btn-sm" onclick="loadPolicy()">搜索</button>
+    </div>
+    <div class="card">
+      <div class="card-body" id="policyList"><p class="empty-text">加载中...</p></div>
+    </div>
+    <div class="pagination" id="policyPagination"></div>
+  </main>
+  <script src="/js/app.js"></script>
+  <script>loadPolicy();</script>
+</body>
+</html>
