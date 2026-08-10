@@ -293,14 +293,34 @@ async function saveConfig() {
 
 // ========== 手动操作 ==========
 async function triggerCollect(type) {
-  showToast('开始采集，请稍候...');
+  showToast('采集任务已启动，后台执行中...');
   const result = await api('/collect/' + type, { method: 'POST' });
-  if (result && result.success) {
-    showToast('采集完成，请刷新页面查看', 'success');
-    setTimeout(() => location.reload(), 1500);
-  } else {
-    showToast('采集失败: ' + (result?.error || '未知错误'), 'error');
+  if (!result || !result.success) {
+    showToast('启动采集失败: ' + (result?.message || '未知错误'), 'error');
+    return;
   }
+
+  // 如果是"进行中"也继续轮询
+  // 轮询采集状态，每3秒检查一次，最多等5分钟
+  const maxAttempts = 100;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const status = await api('/collect/' + type + '/status');
+    if (!status) continue;
+
+    if (status.status === 'completed') {
+      showToast('采集完成，新增 ' + (status.result || 0) + ' 条数据', 'success');
+      setTimeout(() => location.reload(), 1500);
+      return;
+    }
+    if (status.status === 'failed') {
+      showToast('采集失败: ' + (status.error || '未知错误'), 'error');
+      return;
+    }
+    // status === 'running' → 继续等待
+    if (i % 10 === 9) showToast('采集中，请耐心等待...');
+  }
+  showToast('采集超时，请稍后查看采集日志', 'error');
 }
 
 async function generateBrief() {
