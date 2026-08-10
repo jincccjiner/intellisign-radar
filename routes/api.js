@@ -6,6 +6,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../services/database');
 const logger = require('../services/logger');
+const { beijingISO, beijingDate } = require('../services/time-util');
 
 // ==================== 仪表盘统计 ====================
 router.get('/stats', (req, res) => {
@@ -16,7 +17,7 @@ router.get('/stats', (req, res) => {
     const briefCount = (db.queryOne('SELECT COUNT(*) as c FROM briefs') || {}).c || 0;
 
     // 最近7天情报趋势
-    const weekAgo = new Date(Date.now() - 7 * 24 * 3600000).toISOString().slice(0, 10);
+    const weekAgo = beijingDate(new Date(Date.now() - 7 * 24 * 3600000));
     const trendRows = db.queryAll(
       `SELECT collect_date, COUNT(*) as cnt FROM intelligence WHERE collect_date >= ? GROUP BY collect_date ORDER BY collect_date`,
       [weekAgo]
@@ -84,9 +85,9 @@ router.post('/intelligence', (req, res) => {
   try {
     const item = req.body;
     item.id = item.id || uuidv4();
-    item.collect_date = item.collect_date || new Date().toISOString().slice(0, 10);
-    item.created_at = new Date().toISOString();
-    item.updated_at = new Date().toISOString();
+    item.collect_date = item.collect_date || beijingISO().slice(0, 10);
+    item.created_at = beijingISO();
+    item.updated_at = beijingISO();
     db.run(
       `INSERT OR REPLACE INTO intelligence (id,title,summary,source_url,source_name,category,sub_category,severity,publish_date,collect_date,content,keywords,is_starred,notes,is_read,created_at,updated_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -104,7 +105,7 @@ router.post('/intelligence', (req, res) => {
 router.put('/intelligence/:id', (req, res) => {
   try {
     const item = req.body;
-    item.updated_at = new Date().toISOString();
+    item.updated_at = beijingISO();
     const fields = [];
     const params = [];
     for (const [k, v] of Object.entries(item)) {
@@ -150,8 +151,8 @@ router.post('/competitors', (req, res) => {
   try {
     const item = req.body;
     item.id = item.id || uuidv4();
-    item.collect_date = item.collect_date || new Date().toISOString().slice(0, 10);
-    item.created_at = new Date().toISOString();
+    item.collect_date = item.collect_date || beijingISO().slice(0, 10);
+    item.created_at = beijingISO();
     db.run(
       `INSERT OR REPLACE INTO competitor_news (id,competitor_name,title,summary,source_url,publish_date,collect_date,category,severity,is_starred,notes,created_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -195,8 +196,8 @@ router.post('/partners', (req, res) => {
   try {
     const item = req.body;
     item.id = item.id || uuidv4();
-    item.collect_date = item.collect_date || new Date().toISOString().slice(0, 10);
-    item.created_at = new Date().toISOString();
+    item.collect_date = item.collect_date || beijingISO().slice(0, 10);
+    item.created_at = beijingISO();
     db.run(
       `INSERT OR REPLACE INTO partner_news (id,partner_name,title,summary,source_url,publish_date,collect_date,category,is_starred,notes,created_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
@@ -241,8 +242,8 @@ router.post('/briefs', (req, res) => {
   try {
     const item = req.body;
     item.id = item.id || uuidv4();
-    item.created_at = new Date().toISOString();
-    item.updated_at = new Date().toISOString();
+    item.created_at = beijingISO();
+    item.updated_at = beijingISO();
     db.run(
       `INSERT OR REPLACE INTO briefs (id,title,period_start,period_end,content,summary,category,status,created_at,updated_at)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
@@ -280,7 +281,7 @@ router.put('/config/:key', (req, res) => {
   try {
     const { value } = req.body;
     db.run('UPDATE monitor_config SET config_value=?, updated_at=? WHERE config_key=?',
-      [value, new Date().toISOString(), req.params.key]);
+      [value, beijingISO(), req.params.key]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: true, message: err.message });
@@ -315,7 +316,7 @@ router.post('/collect/:type', async (req, res) => {
 
     // 启动异步采集任务，立即返回响应
     const taskId = uuidv4();
-    collectTasks[type] = { id: taskId, status: 'running', startedAt: new Date().toISOString(), result: null, error: null };
+    collectTasks[type] = { id: taskId, status: 'running', startedAt: beijingISO(), result: null, error: null };
 
     const collectService = require('../services/collect-service');
     // 异步执行，不阻塞响应
@@ -328,10 +329,10 @@ router.post('/collect/:type', async (req, res) => {
           case 'partner': result = await collectService.collectPartner(); break;
           case 'all': result = await collectService.collectAll(); break;
         }
-        collectTasks[type] = { ...collectTasks[type], status: 'completed', result, completedAt: new Date().toISOString() };
+        collectTasks[type] = { ...collectTasks[type], status: 'completed', result, completedAt: beijingISO() };
         logger.info(`异步采集[${type}]完成，结果: ${result}`);
       } catch (err) {
-        collectTasks[type] = { ...collectTasks[type], status: 'failed', error: err.message, completedAt: new Date().toISOString() };
+        collectTasks[type] = { ...collectTasks[type], status: 'failed', error: err.message, completedAt: beijingISO() };
         logger.error(`异步采集[${type}]失败: ${err.message}`);
       }
     })();
@@ -369,7 +370,7 @@ router.post('/generate-brief', async (req, res) => {
 router.get('/trend', (req, res) => {
   try {
     const { days = 30 } = req.query;
-    const since = new Date(Date.now() - parseInt(days) * 24 * 3600000).toISOString().slice(0, 10);
+    const since = beijingDate(new Date(Date.now() - parseInt(days) * 24 * 3600000));
 
     const intelTrend = db.queryAll(
       `SELECT collect_date, category, COUNT(*) as cnt FROM intelligence WHERE collect_date >= ? GROUP BY collect_date, category ORDER BY collect_date`,
