@@ -12,7 +12,9 @@ async function runWithLog(taskName, collectFn) {
   const logId = uuidv4();
   const startedAt = new Date().toISOString();
   try {
-    const count = await collectFn();
+    const result = await collectFn();
+    // 兼容两种返回格式：数字 或 { task, status, count } 对象
+    const count = typeof result === 'number' ? result : (result && result.count != null ? result.count : 0);
     db.run(
       `INSERT INTO collect_logs (id,task_name,status,result_count,started_at,finished_at) VALUES (?,?,?,?,?,?)`,
       [logId, taskName, 'success', count, startedAt, new Date().toISOString()]
