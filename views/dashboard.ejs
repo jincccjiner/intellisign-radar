@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IntelliSign Radar - 电子签章行业情报雷达</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-text">IntelliSign<small>Radar</small></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/" class="nav-item <%= page==='dashboard'?'active':'' %>">总览仪表盘</a>
+      <a href="/policy" class="nav-item <%= page==='policy'?'active':'' %>">政策法规</a>
+      <a href="/competitor" class="nav-item <%= page==='competitor'?'active':'' %>">竞品动态</a>
+      <a href="/partner" class="nav-item <%= page==='partner'?'active':'' %>">生态伙伴</a>
+      <a href="/briefs" class="nav-item <%= page==='briefs'?'active':'' %>">情报简报</a>
+      <a href="/collect-logs" class="nav-item <%= page==='collect-logs'?'active':'' %>">采集日志</a>
+      <a href="/settings" class="nav-item <%= page==='settings'?'active':'' %>">系统设置</a>
+    </nav>
+    <div class="sidebar-footer"><small>IntelliSign Radar v1.0</small></div>
+  </aside>
+  <main class="main-content">
+    <header class="page-header">
+      <h1>总览仪表盘</h1>
+      <div class="header-actions">
+        <button class="btn btn-primary" onclick="triggerCollect('all')">立即采集</button>
+        <button class="btn btn-outline" onclick="generateBrief()">生成周报</button>
+      </div>
+    </header>
+    <section class="stats-cards">
+      <div class="stat-card" onclick="location.href='/policy'">
+        <div class="stat-icon policy-icon"></div>
+        <div class="stat-info"><div class="stat-number" id="policyCount">-</div><div class="stat-label">政策法规</div></div>
+      </div>
+      <div class="stat-card" onclick="location.href='/competitor'">
+        <div class="stat-icon comp-icon"></div>
+        <div class="stat-info"><div class="stat-number" id="competitorCount">-</div><div class="stat-label">竞品动态</div></div>
+      </div>
+      <div class="stat-card" onclick="location.href='/partner'">
+        <div class="stat-icon partner-icon"></div>
+        <div class="stat-info"><div class="stat-number" id="partnerCount">-</div><div class="stat-label">生态伙伴</div></div>
+      </div>
+      <div class="stat-card" onclick="location.href='/briefs'">
+        <div class="stat-icon brief-icon"></div>
+        <div class="stat-info"><div class="stat-number" id="briefCount">-</div><div class="stat-label">情报简报</div></div>
+      </div>
+    </section>
+    <section class="two-col">
+      <div class="col-7">
+        <div class="card">
+          <div class="card-header"><h2>最近政策法规</h2><a href="/policy" class="link">查看全部</a></div>
+          <div class="card-body" id="recentPolicy"><p class="empty-text">加载中...</p></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-header"><h2>最近竞品动态</h2><a href="/competitor" class="link">查看全部</a></div>
+          <div class="card-body" id="recentComp"><p class="empty-text">加载中...</p></div>
+        </div>
+      </div>
+      <div class="col-5">
+        <div class="card">
+          <div class="card-header"><h2>风险预警</h2></div>
+          <div class="card-body" id="alerts"><p class="empty-text">暂无预警</p></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-header"><h2>分类统计</h2></div>
+          <div class="card-body" id="categoryStats"><p class="empty-text">加载中...</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="/js/app.js"></script>
+  <script>loadDashboard();</script>
+</body>
+</html>
