@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系统设置 - IntelliSign Radar</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-brand"><div class="brand-text">IntelliSign<small>Radar</small></div></div>
+    <nav class="sidebar-nav">
+      <a href="/" class="nav-item">总览仪表盘</a>
+      <a href="/policy" class="nav-item">政策法规</a>
+      <a href="/competitor" class="nav-item">竞品动态</a>
+      <a href="/partner" class="nav-item">生态伙伴</a>
+      <a href="/briefs" class="nav-item">情报简报</a>
+      <a href="/collect-logs" class="nav-item">采集日志</a>
+      <a href="/settings" class="nav-item active">系统设置</a>
+    </nav>
+    <div class="sidebar-footer"><small>IntelliSign Radar v1.0</small></div>
+  </aside>
+  <main class="main-content">
+    <header class="page-header"><h1>系统设置</h1></header>
+    <div class="card">
+      <div class="card-header"><h2>监控配置</h2></div>
+      <div class="card-body" id="configForm">
+        <div class="form-group">
+          <label>政策监控关键词</label>
+          <textarea id="cfgPolicyKeywords" rows="3" class="form-control"></textarea>
+          <small class="form-hint">多个关键词用逗号分隔</small>
+        </div>
+        <div class="form-group">
+          <label>竞品名单</label>
+          <input type="text" id="cfgCompetitorList" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>生态伙伴名单</label>
+          <input type="text" id="cfgPartnerList" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>采集频率</label>
+          <select id="cfgCollectFreq" class="form-control">
+            <option value="daily">每天</option>
+            <option value="weekly">每周</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><h2>定时任务</h2></div>
+      <div class="card-body">
+        <ul id="cronJobs" class="job-list">
+          <li>每天 08:30 - 全量数据采集</li>
+          <li>每天 18:00 - 生成日报摘要</li>
+          <li>每周一 09:00 - 生成周报</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+  <script src="/js/app.js"></script>
+  <script>loadConfig();</script>
+</body>
+</html>
