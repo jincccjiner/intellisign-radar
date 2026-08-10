@@ -4,6 +4,7 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const logger = require('./logger');
+const { beijingISO, beijingDate } = require('./time-util');
 const { collectPolicy: doCollectPolicy } = require('./collectors/policy-collector');
 const { collectCompetitor: doCollectCompetitor } = require('./collectors/competitor-collector');
 const { collectPartner: doCollectPartner } = require('./collectors/partner-collector');
