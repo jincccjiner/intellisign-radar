@@ -5,6 +5,7 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const logger = require('./logger');
+const { beijingISO, beijingDate } = require('./time-util');
 
 function generatePeriodRange() {
   const now = new Date();
@@ -16,8 +17,8 @@ function generatePeriodRange() {
   sunday.setDate(monday.getDate() + 6);
 
   return {
-    start: monday.toISOString().slice(0, 10),
-    end: sunday.toISOString().slice(0, 10),
+    start: beijingDate(monday),
+    end: beijingDate(sunday),
   };
 }
 
@@ -169,7 +170,7 @@ async function generateWeeklyBrief() {
     `INSERT OR REPLACE INTO briefs (id,title,period_start,period_end,content,summary,category,status,created_at,updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?)`,
     [brief.id, brief.title, brief.period_start, brief.period_end, brief.content,
-     brief.summary, brief.category, brief.status, new Date().toISOString(), new Date().toISOString()]
+     brief.summary, brief.category, brief.status, beijingISO(), beijingISO()]
   );
 
   logger.info(`情报简报生成完成: ${title}`);
@@ -177,7 +178,7 @@ async function generateWeeklyBrief() {
 }
 
 async function generateDailyBrief() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = beijingDate();
   const title = `电子签章行业日报（${today}）`;
 
   const sections = formatBriefContent(today, today);
@@ -199,7 +200,7 @@ async function generateDailyBrief() {
     `INSERT INTO briefs (id,title,period_start,period_end,content,summary,category,status,created_at,updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?)`,
     [brief.id, brief.title, brief.period_start, brief.period_end, brief.content,
-     brief.summary, brief.category, brief.status, new Date().toISOString(), new Date().toISOString()]
+      brief.summary, brief.category, brief.status, beijingISO(), beijingISO()]
   );
 
   logger.info(`日报生成完成: ${title}`);
