@@ -106,16 +106,19 @@ function parseESignEco(html) {
     } catch (e) { /* skip */ }
   });
 
-  // 兜底：通用解析
+  // 兜底：通用解析 — 更严格的过滤
   if (results.length === 0) {
-    $('a, .card, .item, .partner-item').each((i, el) => {
+    $('a').each((i, el) => {
       if (i >= 15) return false;
       try {
         const $el = $(el);
         const title = $el.find('h3, h2, h4, .title, strong').first().text().trim()
           || $el.text().trim();
-        if (!title || title.length < 5 || title.length > 200) return;
-        if (/^(首页|产品|方案|案例|登录|注册|了解|立即|免费|合作|伙伴)$/.test(title)) return;
+        if (!title || title.length < 8 || title.length > 200) return; // 最短8字
+        // 过滤导航/按钮/无意义文本
+        if (/^(首页|产品|方案|案例|登录|注册|了解|立即|免费|合作|伙伴|English|中文|下载|详情|更多)$/.test(title)) return;
+        if (/^(点击|查看|返回|展开|收起)/.test(title)) return;
+        if (/^(>|<|\)|\(|·|\|)/.test(title)) return;
 
         const href = $el.attr('href') || '';
         let url = href;
@@ -145,7 +148,8 @@ function parseItrusNews(html) {
     try {
       const $el = $(el);
       const title = $el.find('h3, h2, .title, a, p').first().text().trim();
-      if (!title || title.length < 5 || title.length > 200) return;
+      if (!title || title.length < 8 || title.length > 200) return; // 最短8字
+      if (/^(SSL|CA|首页|产品|关于|联系)/.test(title)) return; // 过滤短词
 
       const href = $el.find('a').attr('href') || '';
       let url = href;
@@ -171,7 +175,8 @@ function parseItrusNews(html) {
     try {
       const $el = $(el);
       const title = $el.find('a, h3, h2, .title, p').first().text().trim();
-      if (!title || title.length < 5 || title.length > 200) return;
+      if (!title || title.length < 8 || title.length > 200) return; // 最短8字
+      if (/^(SSL|CA|首页|产品|关于|联系)/.test(title)) return;
 
       const href = $el.find('a').attr('href') || '';
       let url = href;
