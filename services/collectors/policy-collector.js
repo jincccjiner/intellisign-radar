@@ -8,6 +8,8 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const db = require('../database');
 const logger = require('../logger');
+const { beijingISO, beijingDate } = require('../time-util');
+const { beijingISO, beijingDate } = require('../time-util');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
@@ -98,7 +100,7 @@ function classifySubCategory(title, summary) {
 async function collectPolicy() {
   logger.info('开始采集政策法规情报（官网直接爬取模式）...');
   let totalCount = 0;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = beijingDate();
 
   for (const source of POLICY_SOURCES) {
     try {
@@ -124,7 +126,7 @@ async function collectPolicy() {
             id, item.title, item.summary || '', item.source_url,
             source.name, 'policy', subCat, isGovSource ? 'high' : 'info',
             item.publish_date, today, '电子签章政策法规', 0, 0,
-            new Date().toISOString(), new Date().toISOString()
+            beijingISO(), beijingISO()
           ]
         );
         totalCount++;
