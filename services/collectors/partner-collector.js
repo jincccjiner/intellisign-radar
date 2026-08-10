@@ -8,6 +8,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const db = require('../database');
 const logger = require('../logger');
+const { beijingISO, beijingDate } = require('../time-util');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
@@ -133,7 +134,7 @@ async function fetchPage(url) {
 async function collectPartner() {
   logger.info('开始采集生态伙伴动态（官网直接爬取模式）...');
   let totalCount = 0;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = beijingDate();
 
   for (const source of PARTNER_SOURCES) {
     try {
@@ -152,7 +153,7 @@ async function collectPartner() {
           `INSERT INTO partner_news (id,partner_name,title,summary,source_url,publish_date,collect_date,category,is_starred,notes,created_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
           [id, source.partnerName, item.title, item.summary || '', item.source_url,
-           item.publish_date, today, cat, 0, '', new Date().toISOString()]
+           item.publish_date, today, cat, 0, '', beijingISO()]
         );
         totalCount++;
       }
