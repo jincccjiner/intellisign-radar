@@ -60,13 +60,14 @@ router.get('/stats', (req, res) => {
 // ==================== 政策法规情报 ====================
 router.get('/intelligence', (req, res) => {
   try {
-    const { category, severity, keyword, page = 1, pageSize = 20 } = req.query;
+    const { category, severity, keyword, page = 1, pageSize = 20, sortBy = 'collect' } = req.query;
     let sql = 'SELECT * FROM intelligence WHERE 1=1';
     const params = [];
     if (category) { sql += ' AND category=?'; params.push(category); }
     if (severity) { sql += ' AND severity=?'; params.push(severity); }
     if (keyword) { sql += ' AND (title LIKE ? OR summary LIKE ? OR content LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`); }
-    sql += ' ORDER BY collect_date DESC';
+    const orderField = sortBy === 'publish' ? 'publish_date' : 'collect_date';
+    sql += ` ORDER BY ${orderField} DESC`;
     const offset = (parseInt(page) - 1) * parseInt(pageSize);
     sql += ` LIMIT ${parseInt(pageSize)} OFFSET ${offset}`;
 
@@ -133,11 +134,12 @@ router.delete('/intelligence/:id', (req, res) => {
 // ==================== 竞品动态 ====================
 router.get('/competitors', (req, res) => {
   try {
-    const { name, page = 1, pageSize = 20 } = req.query;
+    const { name, page = 1, pageSize = 20, sortBy = 'collect' } = req.query;
     let sql = 'SELECT * FROM competitor_news WHERE 1=1';
     const params = [];
     if (name) { sql += ' AND competitor_name=?'; params.push(name); }
-    sql += ' ORDER BY collect_date DESC';
+    const orderField = sortBy === 'publish' ? 'publish_date' : 'collect_date';
+    sql += ` ORDER BY ${orderField} DESC`;
     const offset = (parseInt(page) - 1) * parseInt(pageSize);
     sql += ` LIMIT ${parseInt(pageSize)} OFFSET ${offset}`;
     const rows = db.queryAll(sql, params);
@@ -178,11 +180,12 @@ router.delete('/competitors/:id', (req, res) => {
 // ==================== 生态伙伴动态 ====================
 router.get('/partners', (req, res) => {
   try {
-    const { name, page = 1, pageSize = 20 } = req.query;
+    const { name, page = 1, pageSize = 20, sortBy = 'collect' } = req.query;
     let sql = 'SELECT * FROM partner_news WHERE 1=1';
     const params = [];
     if (name) { sql += ' AND partner_name=?'; params.push(name); }
-    sql += ' ORDER BY collect_date DESC';
+    const orderField = sortBy === 'publish' ? 'publish_date' : 'collect_date';
+    sql += ` ORDER BY ${orderField} DESC`;
     const offset = (parseInt(page) - 1) * parseInt(pageSize);
     sql += ` LIMIT ${parseInt(pageSize)} OFFSET ${offset}`;
     const rows = db.queryAll(sql, params);
