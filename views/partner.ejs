@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>生态伙伴 - IntelliSign Radar</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-brand"><div class="brand-text">IntelliSign<small>Radar</small></div></div>
+    <nav class="sidebar-nav">
+      <a href="/" class="nav-item">总览仪表盘</a>
+      <a href="/policy" class="nav-item">政策法规</a>
+      <a href="/competitor" class="nav-item">竞品动态</a>
+      <a href="/partner" class="nav-item active">生态伙伴</a>
+      <a href="/briefs" class="nav-item">情报简报</a>
+      <a href="/collect-logs" class="nav-item">采集日志</a>
+      <a href="/settings" class="nav-item">系统设置</a>
+    </nav>
+    <div class="sidebar-footer"><small>IntelliSign Radar v1.0</small></div>
+  </aside>
+  <main class="main-content">
+    <header class="page-header">
+      <h1>生态伙伴动态</h1>
+      <div class="header-actions">
+        <button class="btn btn-primary" onclick="triggerCollect('partner')">采集伙伴动态</button>
+      </div>
+    </header>
+    <div class="filter-bar">
+      <select id="filterPartner" onchange="loadPartner()">
+        <option value="">全部伙伴</option>
+        <option value="安证通">安证通</option>
+        <option value="立约笔">立约笔</option>
+        <option value="蓝凌">蓝凌</option>
+        <option value="天威诚信">天威诚信</option>
+      </select>
+    </div>
+    <div class="card">
+      <div class="card-body" id="partnerList"><p class="empty-text">加载中...</p></div>
+    </div>
+  </main>
+  <script src="/js/app.js"></script>
+  <script>loadPartner();</script>
+</body>
+</html>
