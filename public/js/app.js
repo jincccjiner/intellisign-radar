@@ -309,7 +309,8 @@ async function triggerCollect(type) {
     if (!status) continue;
 
     if (status.status === 'completed') {
-      showToast('采集完成，新增 ' + (status.result || 0) + ' 条数据', 'success');
+      const count = typeof status.result === 'object' ? (status.result?.count ?? status.result?.task ?? '') : status.result;
+      showToast('采集完成，新增 ' + count + ' 条数据', 'success');
       setTimeout(() => location.reload(), 1500);
       return;
     }
