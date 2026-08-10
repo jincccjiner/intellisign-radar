@@ -6,6 +6,7 @@ const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
+const { beijingISO } = require('./time-util');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'intellisign.db');
 
@@ -147,7 +148,7 @@ async function initDatabase() {
 }
 
 function initDefaultConfig() {
-  const now = new Date().toISOString();
+  const now = beijingISO();
   const defaults = [
     ['policy_keywords', '电子签名,电子签章,电子合同,电子认证,CA证书,数字证书,密码法,电子签名法,GM/T 0031', '政策监控关键词'],
     ['competitor_list', 'E签宝,法大大,契约锁,腾讯电子签', '竞品名单'],
