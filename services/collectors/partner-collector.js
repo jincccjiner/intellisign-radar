@@ -1,13 +1,12 @@
 /**
  * 生态伙伴动态采集器
  * 监控：安证通、立约笔、蓝凌、天威诚信 等生态伙伴的动态
- * 数据源：百度搜索
+ * 数据源：Bing + Google 多源搜索
  */
-const axios = require('axios');
-const cheerio = require('cheerio');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const logger = require('../logger');
+const { searchMulti } = require('../search-util');
 
 const PARTNERS = [
   {
@@ -32,57 +31,11 @@ const PARTNERS = [
   },
 ];
 
-function extractPublishDate(text) {
-  if (!text) return null;
-  const m1 = text.match(/(\d{4}[-/]\d{1,2}[-/]\d{1,2})/);
-  if (m1) return m1[1].replace(/\//g, '-');
-  const m2 = text.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-  if (m2) return `${m2[1]}-${m2[2].padStart(2, '0')}-${m2[3].padStart(2, '0')}`;
-  return null;
-}
-
 function classifyCategory(title) {
   if (/合作|签约|战略|生态/.test(title)) return 'cooperation';
   if (/产品|更新|发布|上线/.test(title)) return 'product';
   if (/认证|证书|CA/.test(title)) return 'certification';
   return 'other';
-}
-
-async function searchBaiduPartner(keyword, maxResults = 8) {
-  const results = [];
-  try {
-    const resp = await axios.get('https://www.baidu.com/s', {
-      params: { wd: keyword, rn: maxResults, ie: 'utf-8' },
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'zh-CN,zh;q=0.9',
-      },
-      timeout: 15000,
-    });
-
-    const $ = cheerio.load(resp.data);
-    $('.result, .c-container').each((i, el) => {
-      try {
-        const titleEl = $(el).find('h3 a, .t a').first();
-        const title = titleEl.text().trim();
-        const url = titleEl.attr('href') || '';
-        const snippet = $(el).find('.c-abstract, .c-span-last .content-right_8Zs40, p').first().text().trim();
-
-        if (title && title.length > 5) {
-          results.push({
-            title,
-            source_url: url.startsWith('http') ? url : '',
-            summary: snippet.slice(0, 300),
-            publish_date: extractPublishDate(snippet) || extractPublishDate(title),
-          });
-        }
-      } catch (e) { /* skip */ }
-    });
-  } catch (err) {
-    logger.error(`伙伴百度搜索[${keyword}]失败: ${err.message}`);
-  }
-  return results;
 }
 
 async function collectPartner() {
@@ -93,7 +46,7 @@ async function collectPartner() {
   for (const partner of PARTNERS) {
     for (const kw of partner.keywords) {
       try {
-        const items = await searchBaiduPartner(kw, 6);
+        const items = await searchMulti(kw, 5);
 
         for (const item of items) {
           const existing = db.queryOne('SELECT id FROM partner_news WHERE title=?', [item.title]);
@@ -104,13 +57,13 @@ async function collectPartner() {
           db.run(
             `INSERT INTO partner_news (id,partner_name,title,summary,source_url,publish_date,collect_date,category,is_starred,notes,created_at)
              VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-            [id, partner.name, item.title, item.summary, item.source_url,
+            [id, partner.name, item.title, item.summary || '', item.source_url,
              item.publish_date, today, cat, 0, '', new Date().toISOString()]
           );
           totalCount++;
         }
 
-        await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+        await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
       } catch (err) {
         logger.error(`采集伙伴[${partner.name}][${kw}]异常: ${err.message}`);
       }
