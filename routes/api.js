@@ -297,24 +297,60 @@ router.get('/collect-logs', (req, res) => {
   }
 });
 
+// 采集任务状态跟踪（内存中）
+const collectTasks = {};
+
 // ==================== 手动触发采集 ====================
 router.post('/collect/:type', async (req, res) => {
   try {
     const { type } = req.params;
-    const collectService = require('../services/collect-service');
-    let result;
-    switch (type) {
-      case 'policy': result = await collectService.collectPolicy(); break;
-      case 'competitor': result = await collectService.collectCompetitor(); break;
-      case 'partner': result = await collectService.collectPartner(); break;
-      case 'all': result = await collectService.collectAll(); break;
-      default: return res.status(400).json({ error: true, message: '未知采集类型: ' + type });
+    if (!['policy', 'competitor', 'partner', 'all'].includes(type)) {
+      return res.status(400).json({ error: true, message: '未知采集类型: ' + type });
     }
-    res.json({ success: true, result });
+
+    // 如果该类型正在采集中，返回"进行中"
+    if (collectTasks[type] && collectTasks[type].status === 'running') {
+      return res.json({ success: true, message: '采集任务进行中', taskId: collectTasks[type].id });
+    }
+
+    // 启动异步采集任务，立即返回响应
+    const taskId = uuidv4();
+    collectTasks[type] = { id: taskId, status: 'running', startedAt: new Date().toISOString(), result: null, error: null };
+
+    const collectService = require('../services/collect-service');
+    // 异步执行，不阻塞响应
+    (async () => {
+      try {
+        let result;
+        switch (type) {
+          case 'policy': result = await collectService.collectPolicy(); break;
+          case 'competitor': result = await collectService.collectCompetitor(); break;
+          case 'partner': result = await collectService.collectPartner(); break;
+          case 'all': result = await collectService.collectAll(); break;
+        }
+        collectTasks[type] = { ...collectTasks[type], status: 'completed', result, completedAt: new Date().toISOString() };
+        logger.info(`异步采集[${type}]完成，结果: ${result}`);
+      } catch (err) {
+        collectTasks[type] = { ...collectTasks[type], status: 'failed', error: err.message, completedAt: new Date().toISOString() };
+        logger.error(`异步采集[${type}]失败: ${err.message}`);
+      }
+    })();
+
+    res.json({ success: true, message: '采集任务已启动', taskId, type });
   } catch (err) {
-    logger.error('手动采集失败: ' + err.message);
+    logger.error('启动采集失败: ' + err.message);
     res.status(500).json({ error: true, message: err.message });
   }
+});
+
+// 查询采集任务状态
+router.get('/collect/:type/status', (req, res) => {
+  const { type } = req.params;
+  const task = collectTasks[type];
+  if (!task) {
+    return res.json({ status: 'idle' });
+  }
+  res.json(task);
 });
 
 // ==================== 手动生成简报 ====================
