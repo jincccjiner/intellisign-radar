@@ -8,6 +8,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const db = require('../database');
 const logger = require('../logger');
+const { beijingISO, beijingDate } = require('../time-util');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
@@ -239,7 +240,7 @@ async function fetchPage(url) {
 async function collectCompetitor() {
   logger.info('开始采集竞品动态（官网直接爬取模式）...');
   let totalCount = 0;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = beijingDate();
 
   for (const source of COMPETITOR_SOURCES) {
     try {
@@ -259,7 +260,7 @@ async function collectCompetitor() {
           `INSERT INTO competitor_news (id,competitor_name,title,summary,source_url,publish_date,collect_date,category,severity,is_starred,notes,created_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
           [id, source.name, item.title, item.summary || '', item.source_url,
-           item.publish_date, today, cat, 'info', 0, '', new Date().toISOString()]
+            item.publish_date, today, cat, 'info', 0, '', beijingISO()]
         );
         totalCount++;
       }
