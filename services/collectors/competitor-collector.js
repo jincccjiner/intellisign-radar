@@ -1,7 +1,7 @@
 /**
- * 竞品动态采集器 v2
+ * 竞品动态采集器 v3
  * 监控：E签宝、法大大、契约锁、腾讯电子签 的产品更新、融资、合作等动态
- * 数据源：直接爬取各竞品官网新闻/动态页面（不依赖搜索引擎）
+ * 数据源：直接爬取各竞品官网新闻/动态页面
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -16,118 +16,141 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const COMPETITOR_SOURCES = [
   {
     name: 'E签宝',
-    url: 'https://www.esign.cn/news',
-    parser: parseESignNews,
+    sources: [
+      { url: 'https://www.esign.cn/news', parser: parseESignNews },
+      { url: 'https://www.esign.cn/blog', parser: parseESignBlog },
+    ],
   },
   {
     name: '法大大',
-    url: 'https://www.fadada.com/company-news',
-    parser: parseFaDaDaNews,
+    sources: [
+      { url: 'https://www.fadada.com/company-news', parser: parseFaDaDaNews },
+    ],
   },
   {
     name: '契约锁',
-    url: 'https://www.qiyuesuo.com',
-    parser: parseQiyuesuoNews,
+    sources: [
+      { url: 'https://www.qiyuesuo.com/en-US/us/detail/blogCompany', parser: parseQiyuesuoDetail },
+      { url: 'https://www.qiyuesuo.com/en-US/us/detail/blogIndustry', parser: parseQiyuesuoDetail },
+    ],
   },
   {
     name: '腾讯电子签',
-    url: 'https://qian.tencent.com/',
-    parser: parseTencentSignNews,
+    sources: [
+      { url: 'https://cloud.tencent.com/developer/article?filter=ess', parser: parseTencentCloud },
+    ],
   },
 ];
 
 /**
- * 解析 e签宝新闻页
- * 页面结构：每个新闻项包含标题(h3/a)、日期、摘要
+ * 解析 E签宝 /news 页面
+ * 结构：.article-card > .article-card-title (h3), .article-card-meta span (日期), .article-card-desc (摘要)
  */
 function parseESignNews(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // e签宝新闻列表项 - 根据实际页面结构调整选择器
-  // 从 webfetch 结果看，新闻卡片的标题在 h3 标签中，日期在标题下方
-  $('a').each((i, el) => {
-    if (i >= 15) return false;
+  $('.article-card').each((i, el) => {
+    if (i >= 20) return false;
     try {
-      const $el = $(el);
-      const title = $el.find('h3, h2, .title').first().text().trim()
-        || $el.text().trim();
-      
-      // 只保留有意义的标题
-      if (!title || title.length < 8 || title.length > 200) return;
-      // 过滤掉导航/按钮文本
-      if (/^(首页|产品|方案|案例|登录|注册|了解详情|查看详情|免费试用)$/.test(title)) return;
-      if (/^\[!/.test(title)) return; // 过滤图片 alt
+      const $card = $(el);
+      const title = $card.find('.article-card-title').text().trim();
+      if (!title || title.length < 5) return;
 
-      const href = $el.attr('href') || '';
+      const dateText = $card.find('.article-card-meta span').first().text().trim();
+      const dateMatch = dateText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+      const summary = $card.find('.article-card-desc').text().trim();
+      const href = $card.find('a').first().attr('href') || '';
       let url = href;
       if (url.startsWith('/')) url = 'https://www.esign.cn' + url;
 
-      // 尝试找日期
-      const parentText = $el.parent().text() + ' ' + $el.closest('div').text();
-      const dateMatch = parentText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
-      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
-
-      // 尝试找摘要
-      const snippet = $el.next().text().trim() || $el.parent().find('p').first().text().trim();
-
-      results.push({
-        title: title.slice(0, 200),
-        summary: snippet.slice(0, 300),
-        source_url: url,
-        publish_date: publishDate,
-      });
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
     } catch (e) { /* skip */ }
   });
 
-  // 去重
-  const seen = new Set();
-  return results.filter(r => {
-    if (seen.has(r.title)) return false;
-    seen.add(r.title);
-    return true;
+  // 兜底：如果没有 .article-card 选择器命中，尝试通用解析
+  if (results.length === 0) {
+    $('h3, h2').each((i, el) => {
+      if (i >= 20) return false;
+      const title = $(el).text().trim();
+      if (!title || title.length < 8 || title.length > 200) return;
+      if (/^(首页|产品|方案|案例|登录|注册|了解|查看|免费)/.test(title)) return;
+
+      const $parent = $(el).closest('a, div, li');
+      const dateMatch = $parent.text().match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const href = $parent.find('a').first().attr('href') || $parent.attr('href') || '';
+      let url = href;
+      if (url.startsWith('/')) url = 'https://www.esign.cn' + url;
+      const summary = $parent.find('p, .desc, .article-card-desc').first().text().trim();
+
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: dateMatch ? dateMatch[1].replace(/\//g, '-') : null });
+    });
+  }
+
+  return dedupe(results);
+}
+
+/**
+ * 解析 E签宝 /blog 页面（行业资讯）
+ */
+function parseESignBlog(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  $('.article-card').each((i, el) => {
+    if (i >= 20) return false;
+    try {
+      const $card = $(el);
+      const title = $card.find('.article-card-title').text().trim();
+      if (!title || title.length < 5) return;
+
+      const dateText = $card.find('.article-card-meta span').first().text().trim();
+      const dateMatch = dateText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+      const summary = $card.find('.article-card-desc').text().trim();
+      const href = $card.find('a').first().attr('href') || '';
+      let url = href;
+      if (url.startsWith('/')) url = 'https://www.esign.cn' + url;
+
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
   });
+
+  return dedupe(results);
 }
 
 /**
  * 解析法大大公司动态页
- * 页面结构：每个新闻是 a 标签，包含粗体标题、摘要文本、日期
  */
 function parseFaDaDaNews(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // 法大大新闻列表项：a 标签内含 strong/b 标题 + 摘要 + 日期
   $('a[href*="/article/"]').each((i, el) => {
-    if (i >= 15) return false;
+    if (i >= 20) return false;
     try {
       const $el = $(el);
       const title = $el.find('strong, b, .title').first().text().trim()
         || $el.find('*').first().text().trim();
-      
       if (!title || title.length < 5) return;
 
       const href = $el.attr('href') || '';
       let url = href;
       if (url.startsWith('/')) url = 'https://www.fadada.com' + url;
 
-      // 提取日期
       const text = $el.text();
       const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2}[\s\d:]*)/);
       const publishDate = dateMatch ? dateMatch[1].slice(0, 10).replace(/\//g, '-') : null;
 
-      // 提取摘要
       const snippet = $el.find('p, span, div').toArray()
         .map(e => $(e).text().trim())
         .filter(t => t.length > 20 && t !== title)
         .slice(0, 1)[0] || '';
 
-      results.push({
-        title: title.slice(0, 200),
-        summary: snippet.slice(0, 300),
-        source_url: url,
-        publish_date: publishDate,
-      });
+      results.push({ title: title.slice(0, 200), summary: snippet.slice(0, 300), source_url: url, publish_date: publishDate });
     } catch (e) { /* skip */ }
   });
 
@@ -135,79 +158,123 @@ function parseFaDaDaNews(html) {
 }
 
 /**
- * 解析契约锁官网首页新闻
+ * 解析契约锁新闻列表详情页 (blogCompany / blogIndustry)
  */
-function parseQiyuesuoNews(html) {
+function parseQiyuesuoDetail(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // 契约锁首页动态区的新闻链接
-  $('a[href*="/blog/"], a[href*="/us/detail/"]').each((i, el) => {
-    if (i >= 10) return false;
+  // 契约锁新闻列表：每条包含标题、摘要、日期
+  // 尝试多种选择器
+  $('.blog-item, .news-item, .list-item, .col').each((i, el) => {
+    if (i >= 15) return false;
     try {
       const $el = $(el);
-      const title = $el.text().trim().replace(/\s+/g, ' ');
-      
+      const title = $el.find('a, p, h3, h2, .title').first().text().trim().replace(/\s+/g, ' ');
       if (!title || title.length < 8 || title.length > 200) return;
 
-      const href = $el.attr('href') || '';
+      const href = $el.find('a').attr('href') || '';
       let url = href;
       if (url.startsWith('/')) url = 'https://www.qiyuesuo.com' + url;
 
-      const parentText = $el.parent().text();
-      const snippet = parentText.replace(title, '').trim().slice(0, 300);
+      const text = $el.text();
+      const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2}[\s\d:]*)/);
+      const publishDate = dateMatch ? dateMatch[1].slice(0, 10).replace(/\//g, '-') : null;
 
-      results.push({
-        title,
-        summary: snippet,
-        source_url: url,
-        publish_date: null,
-      });
+      const snippet = $el.find('.tip, .desc, .summary, p').toArray()
+        .map(e => $(e).text().trim())
+        .filter(t => t.length > 10 && t !== title)
+        .slice(0, 1)[0] || '';
+
+      results.push({ title: title.slice(0, 200), summary: snippet.slice(0, 300), source_url: url, publish_date: publishDate });
     } catch (e) { /* skip */ }
   });
 
-  const seen = new Set();
-  return results.filter(r => {
-    if (seen.has(r.title)) return false;
-    seen.add(r.title);
-    return true;
-  });
+  // 兜底：抓取所有包含 /blog/ 的链接
+  if (results.length === 0) {
+    $('a[href*="/blog/"]').each((i, el) => {
+      if (i >= 15) return false;
+      try {
+        const $el = $(el);
+        const title = $el.text().trim().replace(/\s+/g, ' ');
+        if (!title || title.length < 8 || title.length > 200) return;
+
+        const href = $el.attr('href') || '';
+        let url = href;
+        if (url.startsWith('/')) url = 'https://www.qiyuesuo.com' + url;
+
+        const $parent = $el.closest('div, li, tr');
+        const text = $parent.text();
+        const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2}[\s\d:]*)/);
+        const publishDate = dateMatch ? dateMatch[1].slice(0, 10).replace(/\//g, '-') : null;
+
+        const snippet = text.replace(title, '').trim().slice(0, 300);
+
+        results.push({ title: title.slice(0, 200), summary: snippet, source_url: url, publish_date: publishDate });
+      } catch (e) { /* skip */ }
+    });
+  }
+
+  return dedupe(results);
 }
 
 /**
- * 解析腾讯电子签首页
+ * 解析腾讯云开发者社区电子签相关文章
  */
-function parseTencentSignNews(html) {
+function parseTencentCloud(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // 腾讯电子签首页功能/新闻项
-  $('a, .feature, .news-item, .card').each((i, el) => {
-    if (i >= 10) return false;
-    try {
-      const $el = $(el);
-      const title = $el.find('h3, h2, .title, strong').first().text().trim()
-        || $el.text().trim();
-      
-      if (!title || title.length < 5 || title.length > 200) return;
-      if (/^(产品|方案|定价|登录|注册|了解|立即|免费)$/.test(title)) return;
+  // 腾讯云社区文章卡片
+  '.cd-article-list .cd-article-item, .article-item, .c-acticle-item'.split(', ').forEach(sel => {
+    $(sel).each((i, el) => {
+      if (i >= 15) return false;
+      try {
+        const $el = $(el);
+        const title = $el.find('.cd-article-title, .title, h3, a').first().text().trim();
+        if (!title || title.length < 5 || title.length > 200) return;
 
-      const href = $el.attr('href') || '';
-      let url = href;
-      if (url.startsWith('/')) url = 'https://qian.tencent.com' + url;
-      if (!url.startsWith('http')) url = 'https://qian.tencent.com/';
+        const href = $el.find('a').first().attr('href') || '';
+        let url = href;
+        if (url.startsWith('/')) url = 'https://cloud.tencent.com' + url;
 
-      const snippet = $el.find('p, .desc, .summary').first().text().trim().slice(0, 300);
+        const text = $el.text();
+        const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+        const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
 
-      results.push({
-        title: title.slice(0, 200),
-        summary: snippet,
-        source_url: url,
-        publish_date: null,
-      });
-    } catch (e) { /* skip */ }
+        const summary = $el.find('.cd-article-desc, .desc, p').first().text().trim();
+
+        results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+      } catch (e) { /* skip */ }
+    });
   });
 
+  // 兜底：抓取所有文章链接
+  if (results.length === 0) {
+    $('a[href*="/developer/article/"]').each((i, el) => {
+      if (i >= 15) return false;
+      try {
+        const $el = $(el);
+        const title = $el.text().trim();
+        if (!title || title.length < 5 || title.length > 200) return;
+
+        const href = $el.attr('href') || '';
+        let url = href;
+        if (url.startsWith('/')) url = 'https://cloud.tencent.com' + url;
+
+        const $parent = $el.closest('div, li');
+        const dateMatch = $parent.text().match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+        const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+        results.push({ title: title.slice(0, 200), summary: '', source_url: url, publish_date: publishDate });
+      } catch (e) { /* skip */ }
+    });
+  }
+
+  return dedupe(results);
+}
+
+function dedupe(results) {
   const seen = new Set();
   return results.filter(r => {
     if (seen.has(r.title)) return false;
@@ -238,37 +305,37 @@ async function fetchPage(url) {
 }
 
 async function collectCompetitor() {
-  logger.info('开始采集竞品动态（官网直接爬取模式）...');
+  logger.info('开始采集竞品动态（官网直接爬取模式 v3）...');
   let totalCount = 0;
   const today = beijingDate();
 
-  for (const source of COMPETITOR_SOURCES) {
-    try {
-      logger.info(`正在抓取[${source.name}]官网: ${source.url}`);
-      const html = await fetchPage(source.url);
-      const items = source.parser(html);
-      logger.info(`[${source.name}]解析到 ${items.length} 条新闻`);
+  for (const competitor of COMPETITOR_SOURCES) {
+    for (const src of competitor.sources) {
+      try {
+        logger.info(`正在抓取[${competitor.name}]: ${src.url}`);
+        const html = await fetchPage(src.url);
+        const items = src.parser(html);
+        logger.info(`[${competitor.name}]解析到 ${items.length} 条新闻`);
 
-      for (const item of items) {
-        // 去重
-        const existing = db.queryOne('SELECT id FROM competitor_news WHERE title=?', [item.title]);
-        if (existing) continue;
+        for (const item of items) {
+          const existing = db.queryOne('SELECT id FROM competitor_news WHERE title=?', [item.title]);
+          if (existing) continue;
 
-        const id = uuidv4();
-        const cat = classifyCategory(item.title);
-        db.run(
-          `INSERT INTO competitor_news (id,competitor_name,title,summary,source_url,publish_date,collect_date,category,severity,is_starred,notes,created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [id, source.name, item.title, item.summary || '', item.source_url,
-            item.publish_date, today, cat, 'info', 0, '', beijingISO()]
-        );
-        totalCount++;
+          const id = uuidv4();
+          const cat = classifyCategory(item.title);
+          db.run(
+            `INSERT INTO competitor_news (id,competitor_name,title,summary,source_url,publish_date,collect_date,category,severity,is_starred,notes,created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [id, competitor.name, item.title, item.summary || '', item.source_url,
+              item.publish_date, today, cat, 'info', 0, '', beijingISO()]
+          );
+          totalCount++;
+        }
+
+        await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
+      } catch (err) {
+        logger.error(`采集竞品[${competitor.name}] ${src.url} 异常: ${err.message}`);
       }
-
-      // 控制频率
-      await new Promise(r => setTimeout(r, 1000 + Math.random() * 1000));
-    } catch (err) {
-      logger.error(`采集竞品[${source.name}]异常: ${err.message}`);
     }
   }
 
