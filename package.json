@@ -1,0 +1,32 @@
+{
+  "name": "intellisign-radar",
+  "version": "1.0.0",
+  "description": "电子签章行业情报雷达 - 自动监控政策法规、竞品动态、生态伙伴，生成情报简报",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "electronic-signature",
+    "competitive-intelligence",
+    "monitoring"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.19.0",
+    "cheerio": "^1.1.0",
+    "cors": "^2.8.6",
+    "ejs": "^6.0.1",
+    "express": "^5.2.1",
+    "node-cron": "^4.6.0",
+    "sql.js": "^1.14.1",
+    "uuid": "^9.0.1",
+    "winston": "^3.19.0"
+  }
+}
