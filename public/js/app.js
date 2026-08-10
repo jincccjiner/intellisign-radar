@@ -111,7 +111,8 @@ let policyPage = 1;
 async function loadPolicy() {
   const severity = document.getElementById('filterSeverity')?.value || '';
   const keyword = document.getElementById('filterKeyword')?.value || '';
-  let url = `/intelligence?page=${policyPage}&pageSize=20`;
+  const sortBy = document.getElementById('sortBy')?.value || 'collect';
+  let url = `/intelligence?page=${policyPage}&pageSize=20&sortBy=${sortBy}`;
   if (severity) url += `&severity=${severity}`;
   if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
 
@@ -140,7 +141,8 @@ async function loadPolicy() {
 // ========== 竞品动态 ==========
 async function loadCompetitor() {
   const name = document.getElementById('filterCompetitor')?.value || '';
-  let url = '/competitors?pageSize=50';
+  const sortBy = document.getElementById('sortBy')?.value || 'collect';
+  let url = `/competitors?pageSize=50&sortBy=${sortBy}`;
   if (name) url += `&name=${encodeURIComponent(name)}`;
 
   const data = await api(url);
@@ -167,7 +169,8 @@ async function loadCompetitor() {
 // ========== 生态伙伴 ==========
 async function loadPartner() {
   const name = document.getElementById('filterPartner')?.value || '';
-  let url = '/partners?pageSize=50';
+  const sortBy = document.getElementById('sortBy')?.value || 'collect';
+  let url = `/partners?pageSize=50&sortBy=${sortBy}`;
   if (name) url += `&name=${encodeURIComponent(name)}`;
 
   const data = await api(url);
