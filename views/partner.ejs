@@ -58,7 +58,6 @@
     <div class="filter-bar">
       <select id="filterPartner" onchange="loadPartnerV2()">
         <option value="">全部伙伴</option>
-        <option value="安证通">安证通</option>
         <option value="法大大生态">法大大生态</option>
         <option value="天威诚信">天威诚信</option>
         <option value="蓝凌">蓝凌</option>
@@ -87,7 +86,7 @@
     data.partnerBreakdown.forEach(c => partnerStats[c.partner_name] = c.cnt);
 
     const el = document.getElementById('partnerCards');
-    const allPartners = ['安证通', '法大大生态', '天威诚信', '蓝凌', '立约笔', 'e签宝生态'];
+    const allPartners = ['法大大生态', '天威诚信', '蓝凌', '立约笔', 'e签宝生态'];
     el.innerHTML = allPartners.map(name => {
       const cnt = partnerStats[name] || 0;
       return `<div class="partner-card" onclick="filterByPartner('${name}')">
