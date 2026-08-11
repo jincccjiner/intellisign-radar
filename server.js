@@ -19,7 +19,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // 静态文件
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.svg')) res.setHeader('Content-Type', 'image/svg+xml');
+  }
+}));
 
 // 视图引擎
 app.set('view engine', 'ejs');
