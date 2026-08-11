@@ -1,5 +1,5 @@
 /**
- * 生态伙伴动态采集器 v4
+ * 生态伙伴动态采集器 v5
  * 监控：安证通、立约笔、蓝凌、天威诚信、法大大生态、e签宝生态 等生态伙伴
  * 数据源：
  *  1. 各伙伴官网新闻/动态页面（SSR可爬取）
@@ -7,7 +7,12 @@
  *  3. 安证通 JSON API（3个栏目）
  *  4. 立约笔搜狗微信搜索（官网无新闻页，通过公众号获取）
  *  5. 蓝凌 __NUXT__ 数据提取优化
- * 含日期过滤（只保留最近12个月）+ 智能信号级别判定
+ *  6. e签宝生态改用搜狗微信搜索（官网合作页为SPA无数据）
+ * 含日期过滤（只保留最近12个月）+ 智能信号级别判定（v5放宽）
+ * v5 修复：
+ *  - e签宝生态数据源从官网SPA改为搜狗微信搜索+tsign.cn备用
+ *  - 增强相似标题去重（标点符号归一化）
+ *  - 信号级别判定放宽（medium条件新增更多关键词）
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -27,7 +32,6 @@ const PARTNER_SOURCES = [
     name: '安证通-官网API',
     sources: [{ url: 'https://www.esa2000.com/portal/article/listInformationHomePage', parser: parseAnzhengtongAPI, isAPI: true }],
     partnerName: '安证通',
-    // v4 新增：搜狗微信搜索
     weixinSources: [
       { url: sogouWeixinBase + encodeURIComponent('安证通 电子签章') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
       { url: sogouWeixinBase + encodeURIComponent('安证通 合作') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
@@ -73,16 +77,31 @@ const PARTNER_SOURCES = [
     ],
   },
   {
-    name: 'e签宝-生态合作',
-    sources: [{ url: 'https://www.esign.cn/site/cooperate', parser: parseESignEco, retries: 3 }],
+    name: 'e签宝-生态搜狗微信',
+    // v5修复：官网合作页 /site/cooperate 是纯SPA营销页，无文章数据
+    // 改用搜狗微信搜索作为主数据源 + tsign.cn备用
+    sources: [
+      { url: 'https://tsign.cn/', parser: parseTsignPartner, retries: 2 },
+    ],
     partnerName: 'e签宝生态',
     weixinSources: [
       { url: sogouWeixinBase + encodeURIComponent('E签宝 生态 合作') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('E签宝 渠道 代理') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('E签宝 伙伴 战略') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
     ],
   },
 ];
 
 // ====== 工具函数 ======
+
+/**
+ * 标点符号归一化 — 去重前先统一标点，防止同一新闻因逗号/空格/顿号不同被当作不同条
+ */
+function normalizeTitle(title) {
+  return title
+    .replace(/[\s，、；：！？。""''（）【】《》…—\-·]/g, '') // 去除所有空白和中英文标点
+    .replace(/[,\s;:!?."'()\[\]<>_\-]/g, '');  // 去除英文标点
+}
 
 function filterRecentResults(results, months = 12) {
   const cutoff = new Date();
@@ -95,18 +114,28 @@ function filterRecentResults(results, months = 12) {
   });
 }
 
+/**
+ * v5 增强去重：先归一化标题再判断重复
+ */
 function dedupe(results) {
   const seen = new Set();
   return results.filter(r => {
-    if (seen.has(r.title)) return false;
-    seen.add(r.title);
+    const norm = normalizeTitle(r.title);
+    if (seen.has(norm)) return false;
+    seen.add(norm);
     return true;
   });
 }
 
+/**
+ * v5 信号级别判定放宽：
+ * - high：合作签约/中标/战略（重大商业事件）
+ * - medium：新增更多关键词（产品/更新/发布/融资/获奖/入选/会议/大会/峰会/生态/渠道/代理/升级/上线/接入）
+ * - info：仅作默认
+ */
 function determinePartnerSeverity(title) {
-  if (/合作|签约|战略|中标/.test(title)) return 'high';
-  if (/荣获|获奖|入选|产品|更新|发布/.test(title)) return 'medium';
+  if (/合作|签约|战略|中标|并购|收购/.test(title)) return 'high';
+  if (/荣获|获奖|入选|产品|更新|发布|融资|投资|升级|上线|新功能|接入|生态|渠道|代理|会议|大会|峰会|入围|标杆|案例|认可/.test(title)) return 'medium';
   return 'info';
 }
 
@@ -186,83 +215,35 @@ function parseFaDaDaProduct(html) {
 }
 
 /**
- * 解析 e签宝生态合作页
+ * v5 新增：解析 tsign.cn 首页（e签宝生态备用源）
  */
-function parseESignEco(html) {
+function parseTsignPartner(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // 优先解析 partner-info-item
-  $('a.partner-info-item').each((i, el) => {
+  $('a[href*="/c/"]').each((i, el) => {
     if (i >= 15) return false;
     try {
       const $el = $(el);
-      const title = $el.find('.desc, .title, h3, h2').first().text().trim()
-        || $el.text().trim().slice(0, 200);
-      if (!title || title.length < 5) return;
+      const title = $el.text().trim().replace(/\s+/g, ' ');
+      if (!title || title.length < 8 || title.length > 200) return;
 
-      const href = $el.attr('href') || '';
-      let url = href;
-      if (url.startsWith('/')) url = 'https://www.esign.cn' + url;
-      if (!url.startsWith('http')) url = 'https://www.esign.cn/site/cooperate';
+      let url = $el.attr('href') || '';
+      if (url.startsWith('/')) url = 'https://tsign.cn' + url;
 
-      const text = $el.text();
-      const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
-      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+      const dateMatch = url.match(/\/c\/(20\d{2}-\d{1,2}-\d{1,2})\//);
+      const publishDate = dateMatch ? dateMatch[1] : null;
 
-      results.push({ title: title.slice(0, 200), summary: '', source_url: url, publish_date: publishDate });
+      results.push({ title: title.slice(0, 200), summary: title.slice(0, 300), source_url: url, publish_date: publishDate });
     } catch (e) { /* skip */ }
   });
-
-  // article-card 兜底
-  if (results.length === 0) {
-    $('.article-card').each((i, el) => {
-      if (i >= 15) return false;
-      try {
-        const $card = $(el);
-        const title = $card.find('.article-card-title').text().trim();
-        if (!title || title.length < 5) return;
-
-        const dateText = $card.find('.article-card-meta span').first().text().trim();
-        const dateMatch = dateText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
-        const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
-
-        const summary = $card.find('.article-card-desc').text().trim();
-        const href = $card.find('a').first().attr('href') || '';
-        let url = href;
-        if (url.startsWith('/')) url = 'https://www.esign.cn' + url;
-
-        results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
-      } catch (e) { /* skip */ }
-    });
-  }
-
-  // 通用兜底
-  if (results.length === 0) {
-    $('a').each((i, el) => {
-      if (i >= 15) return false;
-      try {
-        const $el = $(el);
-        const title = $el.find('h3, h2, h4, .title, strong').first().text().trim()
-          || $el.text().trim();
-        if (!title || title.length < 8 || title.length > 200) return;
-        if (/^(首页|产品|方案|案例|登录|注册|了解|立即|免费|合作|伙伴|English|中文|下载|详情|更多)$/.test(title)) return;
-
-        const href = $el.attr('href') || '';
-        let url = href;
-        if (url.startsWith('/')) url = 'https://www.esign.cn' + url;
-        if (!url.startsWith('http')) url = 'https://www.esign.cn/site/cooperate';
-
-        results.push({ title: title.slice(0, 200), summary: '', source_url: url, publish_date: null });
-      } catch (e) { /* skip */ }
-    });
-  }
 
   return dedupe(results);
 }
 
 /**
  * 解析天威诚信新闻列表
+ * v5 优化：增加去重+噪声过滤
  */
 function parseItrusNews(html) {
   const $ = cheerio.load(html);
@@ -332,7 +313,6 @@ function parseLandrayNews(html) {
   try {
     const nuxtMatch = html.match(/newsList\s*:\s*(\[[\s\S]*?\])\s*[,}]/);
     if (nuxtMatch) {
-      // 用简易正则逐条提取
       const rawItems = nuxtMatch[1].match(/\{[^}]+\}/g);
       if (rawItems) {
         for (const raw of rawItems) {
@@ -456,8 +436,24 @@ async function fetchPage(url) {
   return resp.data;
 }
 
+async function fetchPageWithRetry(url, maxRetries = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const timeout = 20000 + (attempt - 1) * 10000;
+      logger.info(`抓取 ${url} (第${attempt}次, 超时${timeout / 1000}s)`);
+      return await fetchPage(url);
+    } catch (err) {
+      lastError = err;
+      logger.warn(`抓取 ${url} 第${attempt}次失败: ${err.message}`);
+      if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
+    }
+  }
+  throw lastError;
+}
+
 async function collectPartner() {
-  logger.info('开始采集生态伙伴动态（v4 官网+公众号+立约笔+智能信号）...');
+  logger.info('开始采集生态伙伴动态（v5 官网+公众号+e签宝生态修复+去重增强+信号调优）...');
   let totalCount = 0;
   const today = beijingDate();
 
@@ -470,13 +466,15 @@ async function collectPartner() {
         if (src.isAPI) {
           items = await src.parser(src.url);
         } else {
-          const html = await fetchPage(src.url);
+          const html = await fetchPageWithRetry(src.url, src.retries || 2);
           items = src.parser(html);
         }
         logger.info(`[${partner.name}]官网解析到 ${items.length} 条动态`);
 
         for (const item of items) {
-          const existing = db.queryOne('SELECT id FROM partner_news WHERE title=?', [item.title]);
+          const normTitle = normalizeTitle(item.title);
+          const existing = db.queryOne('SELECT id FROM partner_news WHERE title=?', [item.title])
+            || db.queryOne('SELECT id FROM partner_news WHERE title LIKE ?', [`%${normTitle.slice(0, 20)}%`]);
           if (existing) continue;
 
           const id = uuidv4();
@@ -497,12 +495,12 @@ async function collectPartner() {
       }
     }
 
-    // 2. v4 新增：搜狗微信搜索源
+    // 2. 搜狗微信搜索源
     if (partner.weixinSources) {
       for (const src of partner.weixinSources) {
         try {
           logger.info(`正在抓取[${partner.partnerName}-搜狗微信]: ${src.url}`);
-          const html = await fetchPage(src.url);
+          const html = await fetchPageWithRetry(src.url, src.retries || 2);
           const items = src.parser(html);
           logger.info(`[${partner.partnerName}-搜狗微信]解析到 ${items.length} 条动态`);
 
