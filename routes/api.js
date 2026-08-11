@@ -364,7 +364,18 @@ router.post('/generate-brief', async (req, res) => {
     const brief = await briefService.generateWeeklyBrief();
     res.json({ success: true, brief });
   } catch (err) {
-    logger.error('生成简报失败: ' + err.message);
+    logger.error('生成周报失败: ' + err.message);
+    res.status(500).json({ error: true, message: err.message });
+  }
+});
+
+router.post('/generate-brief-daily', async (req, res) => {
+  try {
+    const briefService = require('../services/brief-generator');
+    const brief = await briefService.generateDailyBrief();
+    res.json({ success: true, brief });
+  } catch (err) {
+    logger.error('生成日报失败: ' + err.message);
     res.status(500).json({ error: true, message: err.message });
   }
 });
