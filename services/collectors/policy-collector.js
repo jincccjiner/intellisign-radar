@@ -1,12 +1,16 @@
 /**
- * 政策法规采集器 v4
+ * 政策法规采集器 v5
  * 数据源：
  *  1. 搜狗微信搜索（10个关键词，覆盖电子签名全领域政策）
  *  2. 法大大政策法规专栏
  *  3. 契约锁行业资讯页（行业政策解读）
  *  4. 天威诚信新闻（CA/认证领域政策）
  *  5. 蓝凌行业动态（数字化办公政策）
- *  含日期过滤（只保留最近12个月）+ 智能信号级别判定
+ * 含日期过滤（只保留最近12个月）+ 智能信号级别判定
+ * v5 修复：
+ *  - 天威诚信新闻噪声过滤（展会/邀请函/活动不进入政策表）
+ *  - 增强相似标题去重（标点符号归一化）
+ *  - 信号级别判定放宽（medium更多关键词命中）
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -25,7 +29,6 @@ const POLICY_SOURCES = [
   { name: '搜狗微信-电子认证新规', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E8%AE%A4%E8%AF%81+%E6%96%B0%E8%A7%84+%E5%90%88%E8%A7%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
   { name: '搜狗微信-数据跨境规定', url: 'https://weixin.sogou.com/weixin?type=2&query=%E6%95%B0%E6%8D%AE%E8%B7%A8%E5%A2%83+%E8%A7%84%E5%AE%9A+%E6%96%B0%E8%A7%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
   { name: '搜狗微信-电子合同新规', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E5%90%88%E5%90%8C+%E6%96%B0%E8%A7%84+%E6%96%BD%E8%A1%8C&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
-  // v4 新增关键词
   { name: '搜狗微信-密码法商用密码', url: 'https://weixin.sogou.com/weixin?type=2&query=%E5%AF%86%E7%A0%81%E6%B3%95+%E5%95%86%E7%94%A8%E5%AF%86%E7%A0%81+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
   { name: '搜狗微信-CA认证电子存证', url: 'https://weixin.sogou.com/weixin?type=2&query=CA%E8%AE%A4%E8%AF%81+%E7%94%B5%E5%AD%90%E5%AD%98%E8%AF%81+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
   { name: '搜狗微信-可信签名数字证书', url: 'https://weixin.sogou.com/weixin?type=2&query=%E5%8F%AF%E4%BF%A1%E7%AD%BE%E5%90%8D+%E6%95%B0%E5%AD%97%E8%AF%81%E4%B9%A6+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
@@ -35,13 +38,13 @@ const POLICY_SOURCES = [
   // 法大大政策法规专栏
   { name: '法大大-政策法规', url: 'https://www.fadada.com/policies', parser: parseFaDaDaPolicies, retries: 2 },
 
-  // v4 新增：契约锁行业资讯（行业政策解读文章）
+  // 契约锁行业资讯（行业政策解读文章）
   { name: '契约锁-行业资讯', url: 'https://www.qiyuesuo.com/en-US/us/detail/blogIndustry', parser: parseQiyuesuoIndustry, retries: 2 },
 
-  // v4 新增：天威诚信新闻（CA/认证领域政策动态）
+  // 天威诚信新闻（CA/认证领域政策动态）— v5 增加噪声过滤
   { name: '天威诚信-新闻', url: 'https://www.itrus.com.cn/news/list_1.html', parser: parseItrusPolicy, retries: 2 },
 
-  // v4 新增：蓝凌行业动态（数字化办公/信创政策）
+  // 蓝凌行业动态（数字化办公/信创政策）
   { name: '蓝凌-行业动态', url: 'https://www.landray.com.cn/activity', parser: parseLandrayPolicy, retries: 2 },
 ];
 
@@ -56,7 +59,20 @@ const AUTHORITATIVE_SOURCES = [
 // 高信号关键词（出现这些词则 severity=high）
 const HIGH_SIGNAL_KEYWORDS = /新规|施行|强制|禁止|处罚|整改|废止|修订|征求意见|国家标准|行业标准|国务院|人大常委会/;
 
+// ====== v5 噪声过滤关键词 ======
+// 天威诚信等官网新闻中，这些词出现说明不是政策法规，而是活动/营销类
+const POLICY_NOISE_PATTERN = /邀请函|诚邀|展会|参展|展位|亮相|展见|论坛报名|峰会报名|活动报名|参观|来访|招聘|诚聘|校园招聘|社会招聘/;
+
 // ====== 工具函数 ======
+
+/**
+ * 标点符号归一化 — 去重前先统一标点
+ */
+function normalizeTitle(title) {
+  return title
+    .replace(/[\s，、；：！？。""''（）【】《》…—\-·]/g, '')
+    .replace(/[,\s;:!?."'()\[\]<>_\-]/g, '');
+}
 
 function filterRecentResults(results, months = 12) {
   const cutoff = new Date();
@@ -69,23 +85,40 @@ function filterRecentResults(results, months = 12) {
   });
 }
 
+/**
+ * v5 增强去重：先归一化标题再判断重复
+ */
 function dedupe(results) {
   const seen = new Set();
   return results.filter(r => {
-    if (seen.has(r.title)) return false;
-    seen.add(r.title);
+    const norm = normalizeTitle(r.title);
+    if (seen.has(norm)) return false;
+    seen.add(norm);
     return true;
   });
 }
 
+/**
+ * v5 噪声过滤：排除非政策法规类条目
+ */
+function filterPolicyNoise(results) {
+  return results.filter(r => !POLICY_NOISE_PATTERN.test(r.title) && !POLICY_NOISE_PATTERN.test(r.summary || ''));
+}
+
+/**
+ * v5 信号级别判定放宽：
+ * - high：权威来源 或 高信号关键词
+ * - medium：新增更多关键词（规范/标准/管理办法/通知/公告/指引/指南/试点/监管/合规/要求/办法/规定/条例/批复/意见/决定）
+ * - info：仅作默认
+ */
 function determineSeverity(item) {
   const text = (item.title || '') + ' ' + (item.summary || '');
   // 权威来源 = high
   if (AUTHORITATIVE_SOURCES.some(s => (item.source_url || '').includes(s) || text.includes(s))) return 'high';
   // 高信号关键词 = high
   if (HIGH_SIGNAL_KEYWORDS.test(text)) return 'high';
-  // 中等信号关键词
-  if (/规范|标准|管理办法|实施细则|通知|公告|指引|指南|试点/.test(text)) return 'medium';
+  // v5 放宽中等信号关键词
+  if (/规范|标准|管理办法|实施细则|通知|公告|指引|指南|试点|监管|合规|要求|办法|规定|条例|批复|意见|决定|草案|修订稿|有效期|暂缓|过渡/.test(text)) return 'medium';
   return 'info';
 }
 
@@ -167,8 +200,7 @@ function parseFaDaDaPolicies(html) {
 }
 
 /**
- * v4 新增：解析契约锁行业资讯页
- * 结构：ul.blog-list > li > a[href*="/blog/"] > div.content > div.title + div.text + div.right-text(日期)
+ * 解析契约锁行业资讯页
  */
 function parseQiyuesuoIndustry(html) {
   const $ = cheerio.load(html);
@@ -201,14 +233,13 @@ function parseQiyuesuoIndustry(html) {
 }
 
 /**
- * v4 新增：解析天威诚信新闻页
- * 结构：div.swiper-slide 含 h2(标题) + p(摘要) + h3(日期)
+ * v5 增强：解析天威诚信新闻页（增加噪声过滤）
  */
 function parseItrusPolicy(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // 轮播新闻（有日期和摘要）
+  // 轮播新闻
   $('.swiper-slide').each((i, el) => {
     if (i >= 15) return false;
     try {
@@ -252,34 +283,35 @@ function parseItrusPolicy(html) {
     } catch (e) { /* skip */ }
   });
 
-  const recent = filterRecentResults(dedupe(results), 12);
-  logger.info(`天威诚信新闻过滤：${results.length}条 → 最近12个月${recent.length}条`);
+  // v5 新增：噪声过滤 — 排除展会/邀请函/活动类条目
+  const beforeNoise = results.length;
+  const filtered = filterPolicyNoise(results);
+  logger.info(`天威诚信新闻噪声过滤：${beforeNoise}条 → ${filtered.length}条（排除${beforeNoise - filtered.length}条非政策内容）`);
+
+  const recent = filterRecentResults(dedupe(filtered), 12);
+  logger.info(`天威诚信新闻过滤：${filtered.length}条 → 最近12个月${recent.length}条`);
   return recent;
 }
 
 /**
- * v4 新增：解析蓝凌活动/新闻页（提取政策相关动态）
- * 结构：div.new-about-company ul > li > div.right-desc > h1(标题) + div.date + div.article
+ * 解析蓝凌活动/新闻页（提取政策相关动态）
  */
 function parseLandrayPolicy(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // 尝试从 __NUXT__ 数据中提取（含完整 JSON）
+  // 尝试从 __NUXT__ 数据中提取
   const nuxtMatch = html.match(/window\.__NUXT__\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/);
   if (nuxtMatch) {
     try {
-      // __NUXT__ 包含 newsList 数组
       const nuxtStr = nuxtMatch[1];
       const newsListMatch = nuxtStr.match(/newsList\s*:\s*(\[[\s\S]*?\])\s*[,}]/);
       if (newsListMatch) {
-        // 简易提取：逐条匹配 title/publishTime/summary
         const itemRegex = /\{[^}]*title\s*:\s*["']([^"']+)["'][^}]*publishTime\s*:\s*["']([^"']*)["'][^}]*summary\s*:\s*["']([^"']*)["'][^}]*\}/g;
         let m;
         while ((m = itemRegex.exec(newsListMatch[1])) !== null) {
           const title = m[1].trim();
           if (title.length < 8 || title.length > 200) continue;
-          // 只保留与政策/行业/数字化相关的文章
           if (!/政策|法规|合规|标准|认证|数字化|信创|电子签|签名|印章|数据安全|个人信息|行业/.test(title)) continue;
           const publishDate = m[2].slice(0, 10);
           const summary = m[3].slice(0, 300);
@@ -299,7 +331,6 @@ function parseLandrayPolicy(html) {
         const $el = $(el);
         const title = $el.find('.right-desc h1, .right-desc h3, h1, h3').first().text().trim();
         if (!title || title.length < 8 || title.length > 200) return;
-        // 只保留与政策/行业相关的
         if (!/政策|法规|合规|标准|认证|数字化|信创|电子签|签名|印章|数据安全|个人信息|行业/.test(title)) return;
 
         const href = $el.find('a').first().attr('href') || '';
@@ -368,7 +399,7 @@ async function fetchPageWithRetry(url, maxRetries = 3) {
 }
 
 async function collectPolicy() {
-  logger.info('开始采集政策法规情报（v4 多源+公众号+官网+智能信号）...');
+  logger.info('开始采集政策法规情报（v5 多源+公众号+噪声过滤+去重增强+信号调优）...');
   let totalCount = 0;
   const today = beijingDate();
 
@@ -381,7 +412,9 @@ async function collectPolicy() {
       logger.info(`[${source.name}]解析到 ${items.length} 条政策法规`);
 
       for (const item of items) {
-        const existing = db.queryOne('SELECT id FROM intelligence WHERE title=?', [item.title]);
+        const normTitle = normalizeTitle(item.title);
+        const existing = db.queryOne('SELECT id FROM intelligence WHERE title=?', [item.title])
+          || db.queryOne('SELECT id FROM intelligence WHERE title LIKE ?', [`%${normTitle.slice(0, 20)}%`]);
         if (existing) continue;
 
         const severity = determineSeverity(item);
