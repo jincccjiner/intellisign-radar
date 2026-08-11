@@ -38,6 +38,7 @@ const COMPETITOR_SOURCES = [
   {
     name: '腾讯电子签',
     sources: [
+      { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
       { url: 'https://qian.tencent.com/document/version/', parser: parseTencentESSVersion },
     ],
   },
@@ -293,8 +294,52 @@ function parseTencentESSVersion(html) {
     });
   });
 
-  // 只保留最近 30 条
-  return dedupe(results).slice(0, 30);
+  // 只保留最近 10 条功能更新（避免功能描述过多）
+  return dedupe(results).slice(0, 10);
+}
+
+/**
+ * 解析搜狗微信搜索结果（腾讯电子签相关公众号文章）
+ * 结构：ul.news-list > li，每条含 .txt-box h3 a (标题+链接)、
+ *       .s-p / .sp2 (日期)、p (摘要)
+ * 时间格式：document.write(timeConvert('timestamp'))
+ */
+function parseSogouWeixin(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  // 过滤垃圾标题关键词
+  const blacklist = /借钱|骗局|贷款|套现|到账|实际到账|怎么借|套路/;
+
+  $('ul.news-list > li').each((i, li) => {
+    if (i >= 15) return false;
+    try {
+      const $li = $(li);
+      const titleEl = $li.find('.txt-box h3 a');
+      const title = titleEl.text().trim().replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+      if (!title || title.length < 8 || title.length > 200) return;
+      if (blacklist.test(title)) return;
+
+      let url = titleEl.attr('href') || '';
+      if (url.startsWith('/')) url = 'https://weixin.sogou.com' + url;
+
+      // 时间戳提取: document.write(timeConvert('1697016013'))
+      const timeMatch = $li.html().match(/timeConvert\('(\d+)'\)/);
+      let publishDate = null;
+      if (timeMatch) {
+        const ts = parseInt(timeMatch[1]) * 1000;
+        const d = new Date(ts);
+        publishDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      }
+
+      // 摘要
+      const summary = $li.find('.txt-box p').text().trim();
+
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  return dedupe(results);
 }
 
 function dedupe(results) {
@@ -315,12 +360,18 @@ function classifyCategory(title) {
 }
 
 async function fetchPage(url, timeout = 20000) {
+  const headers = {
+    'User-Agent': UA,
+    'Accept': 'text/html,application/xhtml+xml',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+  };
+  // 搜狗微信搜索需要 Referer 头
+  if (url.includes('sogou.com')) {
+    headers['Referer'] = 'https://weixin.sogou.com/';
+    headers['Accept'] = 'text/html';
+  }
   const resp = await axios.get(url, {
-    headers: {
-      'User-Agent': UA,
-      'Accept': 'text/html,application/xhtml+xml',
-      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    },
+    headers,
     timeout,
     maxRedirects: 5,
   });
