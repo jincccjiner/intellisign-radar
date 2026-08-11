@@ -1,7 +1,7 @@
 /**
- * 政策法规采集器 v2
- * 采集政府政策、法规、标准等与电子签章行业相关的内容
- * 数据源：法大大政策法规专栏（汇总了行业核心政策）
+ * 政策法规采集器 v3
+ * 多数据源：搜狗微信搜索（多关键词）+ 法大大政策法规专栏
+ * 含日期过滤（只保留最近12个月）
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -14,10 +14,43 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 // 政策法规数据源
 const POLICY_SOURCES = [
+  // 搜狗微信搜索 - 多关键词（sort=time 按时间排序）
+  {
+    name: '搜狗微信-电子签名政策',
+    url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E7%AD%BE%E5%90%8D+%E6%94%BF%E7%AD%96%E6%B3%95%E8%A7%84+2026&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time',
+    parser: parseSogouWeixin,
+    retries: 2,
+  },
+  {
+    name: '搜狗微信-电子签章政策',
+    url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E7%AD%BE%E7%AB%A0+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time',
+    parser: parseSogouWeixin,
+    retries: 2,
+  },
+  {
+    name: '搜狗微信-电子认证新规',
+    url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E8%AE%A4%E8%AF%81+%E6%96%B0%E8%A7%84+%E5%90%88%E8%A7%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time',
+    parser: parseSogouWeixin,
+    retries: 2,
+  },
+  {
+    name: '搜狗微信-数据跨境规定',
+    url: 'https://weixin.sogou.com/weixin?type=2&query=%E6%95%B0%E6%8D%AE%E8%B7%A8%E5%A2%83+%E8%A7%84%E5%AE%9A+%E6%96%B0%E8%A7%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time',
+    parser: parseSogouWeixin,
+    retries: 2,
+  },
+  {
+    name: '搜狗微信-电子合同新规',
+    url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E5%90%88%E5%90%8C+%E6%96%B0%E8%A7%84+%E6%96%BD%E8%A1%8C&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time',
+    parser: parseSogouWeixin,
+    retries: 2,
+  },
+  // 法大大政策法规专栏（补充）
   {
     name: '法大大-政策法规',
     url: 'https://www.fadada.com/policies',
     parser: parseFaDaDaPolicies,
+    retries: 1,
   },
 ];
 
@@ -28,9 +61,78 @@ const AUTHORITATIVE_SOURCES = [
   'openstd.samr.gov.cn', 'gmstandard.org'
 ];
 
+// ====== 工具函数 ======
+
+/**
+ * 日期过滤：只保留最近 N 个月的文章
+ */
+function filterRecentResults(results, months = 12) {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
+  return results.filter(item => {
+    if (!item.publish_date) return false;
+    const d = new Date(item.publish_date);
+    if (isNaN(d.getTime())) return false;
+    return d >= cutoff;
+  });
+}
+
+function dedupe(results) {
+  const seen = new Set();
+  return results.filter(r => {
+    if (seen.has(r.title)) return false;
+    seen.add(r.title);
+    return true;
+  });
+}
+
+// ====== 解析函数 ======
+
+/**
+ * 解析搜狗微信搜索结果（政策法规相关）
+ * 时间格式：document.write(timeConvert('timestamp'))
+ */
+function parseSogouWeixin(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  const blacklist = /借钱|骗局|贷款|套现|到账|实际到账|怎么借|套路|招聘|考研|复试|中奖|优惠券|pos机|刷卡机|个人pos/;
+
+  $('ul.news-list > li').each((i, li) => {
+    if (i >= 15) return false;
+    try {
+      const $li = $(li);
+      const titleEl = $li.find('.txt-box h3 a');
+      const title = titleEl.text().trim().replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+      if (!title || title.length < 8 || title.length > 200) return;
+      if (blacklist.test(title)) return;
+
+      let url = titleEl.attr('href') || '';
+      if (url.startsWith('/')) url = 'https://weixin.sogou.com' + url;
+
+      // 时间戳提取
+      const timeMatch = $li.html().match(/timeConvert\('(\d+)'\)/);
+      let publishDate = null;
+      if (timeMatch) {
+        const ts = parseInt(timeMatch[1]) * 1000;
+        const d = new Date(ts);
+        publishDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      }
+
+      const summary = $li.find('.txt-box p').text().trim();
+
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  // 过滤最近12个月
+  const recent = filterRecentResults(dedupe(results), 12);
+  logger.info(`搜狗微信政策搜索过滤：${results.length}条 → 最近12个月${recent.length}条`);
+  return recent;
+}
+
 /**
  * 解析法大大政策法规页
- * 结构与 company-news 相同：a[href*="/article/"] 包含标题+摘要+日期
  */
 function parseFaDaDaPolicies(html) {
   const $ = cheerio.load(html);
@@ -42,19 +144,16 @@ function parseFaDaDaPolicies(html) {
       const $el = $(el);
       const title = $el.find('strong, b, .title').first().text().trim()
         || $el.find('*').first().text().trim();
-      
       if (!title || title.length < 5) return;
 
       const href = $el.attr('href') || '';
       let url = href;
       if (url.startsWith('/')) url = 'https://www.fadada.com' + url;
 
-      // 提取日期
       const text = $el.text();
       const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2}[\s\d:]*)/);
       const publishDate = dateMatch ? dateMatch[1].slice(0, 10).replace(/\//g, '-') : null;
 
-      // 提取摘要
       const snippet = $el.find('p, span, div').toArray()
         .map(e => $(e).text().trim())
         .filter(t => t.length > 20 && t !== title)
@@ -69,21 +168,13 @@ function parseFaDaDaPolicies(html) {
     } catch (e) { /* skip */ }
   });
 
-  return results;
+  // 过滤最近12个月
+  const recent = filterRecentResults(dedupe(results), 12);
+  logger.info(`法大大政策法规过滤：${results.length}条 → 最近12个月${recent.length}条`);
+  return recent;
 }
 
-async function fetchPage(url) {
-  const resp = await axios.get(url, {
-    headers: {
-      'User-Agent': UA,
-      'Accept': 'text/html,application/xhtml+xml',
-      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    },
-    timeout: 20000,
-    maxRedirects: 5,
-  });
-  return resp.data;
-}
+// ====== 采集函数 ======
 
 function classifySubCategory(title, summary) {
   const text = title + ' ' + summary;
@@ -96,15 +187,48 @@ function classifySubCategory(title, summary) {
   return null;
 }
 
+async function fetchPage(url, timeout = 20000) {
+  const headers = {
+    'User-Agent': UA,
+    'Accept': 'text/html,application/xhtml+xml',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+  };
+  if (url.includes('sogou.com')) {
+    headers['Referer'] = 'https://weixin.sogou.com/';
+    headers['Accept'] = 'text/html';
+  }
+  const resp = await axios.get(url, { headers, timeout, maxRedirects: 5 });
+  return resp.data;
+}
+
+async function fetchPageWithRetry(url, maxRetries = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const timeout = 20000 + (attempt - 1) * 10000;
+      logger.info(`抓取 ${url} (第${attempt}次, 超时${timeout / 1000}s)`);
+      return await fetchPage(url, timeout);
+    } catch (err) {
+      lastError = err;
+      logger.warn(`抓取 ${url} 第${attempt}次失败: ${err.message}`);
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function collectPolicy() {
-  logger.info('开始采集政策法规情报（官网直接爬取模式）...');
+  logger.info('开始采集政策法规情报（v3 多源+日期过滤）...');
   let totalCount = 0;
   const today = beijingDate();
 
   for (const source of POLICY_SOURCES) {
     try {
+      const maxRetries = source.retries || 2;
       logger.info(`正在抓取[${source.name}]: ${source.url}`);
-      const html = await fetchPage(source.url);
+      const html = await fetchPageWithRetry(source.url, maxRetries);
       const items = source.parser(html);
       logger.info(`[${source.name}]解析到 ${items.length} 条政策法规`);
 
@@ -123,7 +247,8 @@ async function collectPolicy() {
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             id, item.title, item.summary || '', item.source_url,
-            source.name, 'policy', subCat, isGovSource ? 'high' : 'info',
+            source.name, 'policy', subCat,
+            isGovSource ? 'high' : 'info',
             item.publish_date, today, '电子签章政策法规', 0, 0,
             beijingISO(), beijingISO()
           ]
@@ -131,7 +256,7 @@ async function collectPolicy() {
         totalCount++;
       }
 
-      await new Promise(r => setTimeout(r, 1000 + Math.random() * 1000));
+      await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
     } catch (err) {
       logger.error(`采集政策[${source.name}]异常: ${err.message}`);
     }
