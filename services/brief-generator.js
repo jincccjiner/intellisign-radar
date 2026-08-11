@@ -47,7 +47,7 @@ function classifyLayer(item) {
   if (/标准|wallet|钱包|认证|qtsp|ca|pki/.test(name + cat)) return 'L2';
   if (/行业|媒体|新闻|news|report/.test(name + cat)) return 'L3';
   if (/e签宝|法大大|契约锁|腾讯电子签|docusign|adobe/.test(name)) return 'L4';
-  if (/天威|安证通|立约笔|蓝凌|伙伴|partner/.test(name)) return 'L5';
+  if (/天威|立约笔|蓝凌|伙伴|partner/.test(name)) return 'L5';
   return 'L3';
 }
 
