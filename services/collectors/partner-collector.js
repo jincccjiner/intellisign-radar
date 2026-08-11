@@ -1,10 +1,10 @@
 /**
  * 生态伙伴动态采集器 v6
- * 监控：安证通、立约笔、蓝凌、天威诚信、法大大生态、e签宝生态 等生态伙伴
+ * 监控：立约笔、蓝凌、天威诚信、法大大生态、e签宝生态 等生态伙伴
  * 数据源：
  *  1. 各伙伴官网新闻/动态页面（SSR可爬取）
  *  2. 搜狗微信搜索（每个伙伴多关键词，覆盖公众号文章）
- *  3. 安证通 JSON API（3个栏目）
+ *  3. 蓝凌 __NUXT__ 数据提取优化
  *  4. 立约笔搜狗微信搜索（官网无新闻页，通过公众号获取）
  *  5. 蓝凌 __NUXT__ 数据提取优化
  *  6. e签宝生态改用搜狗微信搜索（官网合作页为SPA无数据）
@@ -28,15 +28,6 @@ const sogouWeixinSuffix = '&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&h
 
 // ====== 生态伙伴数据源配置 ======
 const PARTNER_SOURCES = [
-  {
-    name: '安证通-官网API',
-    sources: [{ url: 'https://www.esa2000.com/portal/article/listInformationHomePage', parser: parseAnzhengtongAPI, isAPI: true, sourceName: '官网API' }],
-    partnerName: '安证通',
-    weixinSources: [
-      { url: sogouWeixinBase + encodeURIComponent('安证通 电子签章') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
-      { url: sogouWeixinBase + encodeURIComponent('安证通 合作') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
-    ],
-  },
   {
     name: '立约笔-搜狗微信',
     sources: [],  // 立约笔官网无新闻页，完全依赖搜狗微信
