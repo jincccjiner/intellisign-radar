@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS partner_news (
   publish_date TEXT,
   collect_date TEXT NOT NULL,
   category TEXT,
+  severity TEXT DEFAULT 'info',
   is_starred INTEGER DEFAULT 0,
   notes TEXT,
   created_at TEXT NOT NULL
