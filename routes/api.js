@@ -8,7 +8,7 @@ const db = require('../services/database');
 const logger = require('../services/logger');
 const { beijingISO, beijingDate } = require('../services/time-util');
 
-// ==================== 仪表盘统计 ====================
+// ==================== 仪表盘统计（增强版） ====================
 router.get('/stats', (req, res) => {
   try {
     const policyCount = (db.queryOne('SELECT COUNT(*) as c FROM intelligence WHERE category=?', ['policy']) || {}).c || 0;
@@ -43,13 +43,55 @@ router.get('/stats', (req, res) => {
       `SELECT * FROM intelligence WHERE severity='high' ORDER BY collect_date DESC LIMIT 5`
     );
 
+    // ====== 增强数据 ======
+
+    // 信号分布（high/medium/info）
+    const signalDist = {
+      high: (db.queryOne('SELECT COUNT(*) as c FROM intelligence WHERE severity=?', ['high']) || {}).c || 0,
+      medium: (db.queryOne('SELECT COUNT(*) as c FROM intelligence WHERE severity=?', ['medium']) || {}).c || 0,
+      info: (db.queryOne('SELECT COUNT(*) as c FROM intelligence WHERE severity=? OR severity IS NULL', ['info']) || {}).c || 0,
+    };
+
+    // 竞品动态按竞品分组统计
+    const competitorBreakdown = db.queryAll(
+      `SELECT competitor_name, COUNT(*) as cnt FROM competitor_news GROUP BY competitor_name ORDER BY cnt DESC`
+    );
+
+    // 竞品最近7天每天动态量
+    const compTrend7d = db.queryAll(
+      `SELECT competitor_name, collect_date, COUNT(*) as cnt FROM competitor_news WHERE collect_date >= ? GROUP BY competitor_name, collect_date ORDER BY collect_date`,
+      [weekAgo]
+    );
+
+    // 伙伴动态按伙伴分组统计
+    const partnerBreakdown = db.queryAll(
+      `SELECT partner_name, COUNT(*) as cnt FROM partner_news GROUP BY partner_name ORDER BY cnt DESC`
+    );
+
+    // 最近24小时新增数量
+    const yesterday = beijingDate(new Date(Date.now() - 24 * 3600000));
+    const recent24h = {
+      policy: (db.queryOne('SELECT COUNT(*) as c FROM intelligence WHERE category=? AND collect_date>=?', ['policy', yesterday]) || {}).c || 0,
+      competitor: (db.queryOne('SELECT COUNT(*) as c FROM competitor_news WHERE collect_date>=?', [yesterday]) || {}).c || 0,
+      partner: (db.queryOne('SELECT COUNT(*) as c FROM partner_news WHERE collect_date>=?', [yesterday]) || {}).c || 0,
+    };
+
+    // 全部竞品动态（用于导出）
+    const allCompetitors = db.queryAll('SELECT * FROM competitor_news ORDER BY collect_date DESC LIMIT 500');
+
     res.json({
       counts: { policy: policyCount, competitor: competitorCount, partner: partnerCount, brief: briefCount },
       trend: trendRows,
       categories: categoryRows,
       recentIntel,
       recentComp,
-      alerts
+      alerts,
+      signalDist,
+      competitorBreakdown,
+      compTrend7d,
+      partnerBreakdown,
+      recent24h,
+      allCompetitors,
     });
   } catch (err) {
     logger.error('获取统计数据失败: ' + err.message);
@@ -99,6 +141,15 @@ router.post('/intelligence', (req, res) => {
     res.json({ success: true, id: item.id });
   } catch (err) {
     logger.error('添加情报失败: ' + err.message);
+    res.status(500).json({ error: true, message: err.message });
+  }
+});
+
+router.get('/intelligence/:id', (req, res) => {
+  try {
+    const row = db.queryOne('SELECT * FROM intelligence WHERE id=?', [req.params.id]);
+    res.json(row || {});
+  } catch (err) {
     res.status(500).json({ error: true, message: err.message });
   }
 });
@@ -168,6 +219,33 @@ router.post('/competitors', (req, res) => {
   }
 });
 
+router.get('/competitors/:id', (req, res) => {
+  try {
+    const row = db.queryOne('SELECT * FROM competitor_news WHERE id=?', [req.params.id]);
+    res.json(row || {});
+  } catch (err) {
+    res.status(500).json({ error: true, message: err.message });
+  }
+});
+
+router.put('/competitors/:id', (req, res) => {
+  try {
+    const item = req.body;
+    const fields = [];
+    const params = [];
+    for (const [k, v] of Object.entries(item)) {
+      if (k === 'id') continue;
+      fields.push(`${k}=?`);
+      params.push(v);
+    }
+    params.push(req.params.id);
+    db.run(`UPDATE competitor_news SET ${fields.join(',')} WHERE id=?`, params);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: true, message: err.message });
+  }
+});
+
 router.delete('/competitors/:id', (req, res) => {
   try {
     db.run('DELETE FROM competitor_news WHERE id=?', [req.params.id]);
@@ -208,6 +286,33 @@ router.post('/partners', (req, res) => {
        item.publish_date, item.collect_date, item.category, item.is_starred || 0, item.notes, item.created_at]
     );
     res.json({ success: true, id: item.id });
+  } catch (err) {
+    res.status(500).json({ error: true, message: err.message });
+  }
+});
+
+router.get('/partners/:id', (req, res) => {
+  try {
+    const row = db.queryOne('SELECT * FROM partner_news WHERE id=?', [req.params.id]);
+    res.json(row || {});
+  } catch (err) {
+    res.status(500).json({ error: true, message: err.message });
+  }
+});
+
+router.put('/partners/:id', (req, res) => {
+  try {
+    const item = req.body;
+    const fields = [];
+    const params = [];
+    for (const [k, v] of Object.entries(item)) {
+      if (k === 'id') continue;
+      fields.push(`${k}=?`);
+      params.push(v);
+    }
+    params.push(req.params.id);
+    db.run(`UPDATE partner_news SET ${fields.join(',')} WHERE id=?`, params);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: true, message: err.message });
   }
