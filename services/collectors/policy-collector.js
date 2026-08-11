@@ -1,16 +1,19 @@
 /**
- * 政策法规采集器 v5
+ * 政策法规采集器 v6
  * 数据源：
- *  1. 搜狗微信搜索（10个关键词，覆盖电子签名全领域政策）
- *  2. 法大大政策法规专栏
- *  3. 契约锁行业资讯页（行业政策解读）
- *  4. 天威诚信新闻（CA/认证领域政策）
- *  5. 蓝凌行业动态（数字化办公政策）
+ *  1. 搜狗微信搜索（13个关键词，覆盖电子签名全领域政策+信创+数据安全）
+ *  2. 搜狗资讯搜索（2个关键词，覆盖更广互联网新闻源）
+ *  3. 零壹财经搜索（金融科技政策视角，SSR可抓取）
+ *  4. 法大大政策法规专栏
+ *  5. 契约锁行业资讯页（行业政策解读）
+ *  6. 天威诚信新闻（CA/认证领域政策）
+ *  7. 蓝凌行业动态（数字化办公/信创政策）
  * 含日期过滤（只保留最近12个月）+ 智能信号级别判定
- * v5 修复：
- *  - 天威诚信新闻噪声过滤（展会/邀请函/活动不进入政策表）
- *  - 增强相似标题去重（标点符号归一化）
- *  - 信号级别判定放宽（medium更多关键词命中）
+ * v6 修复：
+ *  - 新增搜狗资讯搜索2个关键词
+ *  - 新增零壹财经搜索2个关键词（金融科技政策视角）
+ *  - 新增3个搜狗微信关键词（信创/数据安全/电子签章应用推广）
+ *  - 修复蓝凌NUXT新格式解析（压缩变量+name字段）
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -34,6 +37,19 @@ const POLICY_SOURCES = [
   { name: '搜狗微信-可信签名数字证书', url: 'https://weixin.sogou.com/weixin?type=2&query=%E5%8F%AF%E4%BF%A1%E7%AD%BE%E5%90%8D+%E6%95%B0%E5%AD%97%E8%AF%81%E4%B9%A6+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
   { name: '搜狗微信-电子印章标准规范', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E5%8D%B0%E7%AB%A0+%E6%A0%87%E5%87%86+%E8%A7%84%E8%8C%83+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
   { name: '搜狗微信-数字化转型政务服务', url: 'https://weixin.sogou.com/weixin?type=2&query=%E6%95%B0%E5%AD%97%E5%8C%96%E8%BD%AC%E5%9E%8B+%E6%94%BF%E5%8A%A1%E6%9C%8D%E5%8A%A1+%E7%94%B5%E5%AD%90%E7%AD%BE%E7%AB%A0&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+
+  // v6 新增：信创、数据安全、个人信息保护相关搜狗微信关键词
+  { name: '搜狗微信-信创国产化', url: 'https://weixin.sogou.com/weixin?type=2&query=%E4%BF%A1%E5%88%9B+%E5%9B%BD%E4%BA%A7%E5%8C%96+%E6%94%BF%E7%AD%96+2026&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-数据安全法', url: 'https://weixin.sogou.com/weixin?type=2&query=%E6%95%B0%E6%8D%AE%E5%AE%89%E5%85%A8%E6%B3%95+%E4%B8%AA%E4%BA%BA%E4%BF%A1%E6%81%AF%E4%BF%9D%E6%8A%A4+%E6%96%B0%E8%A7%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-电子签章应用', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E7%AD%BE%E7%AB%A0+%E5%BA%94%E7%94%A8+%E6%8E%A8%E5%B9%BF&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+
+  // v6 新增：搜狗资讯搜索（覆盖更广的互联网新闻源）
+  { name: '搜狗资讯-电子签名政策', url: 'https://www.sogou.com/web?query=%E7%94%B5%E5%AD%90%E7%AD%BE%E5%90%8D+%E6%94%BF%E7%AD%96+%E6%96%B0%E8%A7%84&ie=utf8&sort=1', parser: parseSogouWeb, retries: 2 },
+  { name: '搜狗资讯-电子签章标准', url: 'https://www.sogou.com/web?query=%E7%94%B5%E5%AD%90%E7%AD%BE%E7%AB%A0+%E6%A0%87%E5%87%86+%E8%A7%84%E8%8C%83&ie=utf8&sort=1', parser: parseSogouWeb, retries: 2 },
+
+  // v6 新增：零壹财经搜索（金融科技政策视角）
+  { name: '零壹财经-电子签名', url: 'https://www.01caijing.com/search/article.htm?type=article&keyword=%25E7%2594%25B5%25E5%25AD%2590%25E7%25AD%25BE%25E5%2590%258D', parser: parse01Caijing, retries: 2 },
+  { name: '零壹财经-数据安全', url: 'https://www.01caijing.com/search/article.htm?type=article&keyword=%25E6%2595%25B0%25E6%258D%25AE%25E5%25AE%2589%25E5%2585%25A8%25E6%25B3%2595', parser: parse01Caijing, retries: 2 },
 
   // 法大大政策法规专栏
   { name: '法大大-政策法规', url: 'https://www.fadada.com/policies', parser: parseFaDaDaPolicies, retries: 2 },
@@ -295,61 +311,177 @@ function parseItrusPolicy(html) {
 
 /**
  * 解析蓝凌活动/新闻页（提取政策相关动态）
+ * v6 优化：适配蓝凌新NUXT压缩变量格式，DOM兜底增强
  */
 function parseLandrayPolicy(html) {
   const $ = cheerio.load(html);
   const results = [];
+  
+  // 政策相关关键词
+  const policyRegex = /政策|法规|合规|标准|认证|数字化|信创|电子签|签名|印章|数据安全|个人信息|行业|AI|智能|生态|合作|签约/;
 
-  // 尝试从 __NUXT__ 数据中提取
-  const nuxtMatch = html.match(/window\.__NUXT__\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/);
-  if (nuxtMatch) {
-    try {
-      const nuxtStr = nuxtMatch[1];
-      const newsListMatch = nuxtStr.match(/newsList\s*:\s*(\[[\s\S]*?\])\s*[,}]/);
-      if (newsListMatch) {
-        const itemRegex = /\{[^}]*title\s*:\s*["']([^"']+)["'][^}]*publishTime\s*:\s*["']([^"']*)["'][^}]*summary\s*:\s*["']([^"']*)["'][^}]*\}/g;
-        let m;
-        while ((m = itemRegex.exec(newsListMatch[1])) !== null) {
-          const title = m[1].trim();
-          if (title.length < 8 || title.length > 200) continue;
-          if (!/政策|法规|合规|标准|认证|数字化|信创|电子签|签名|印章|数据安全|个人信息|行业/.test(title)) continue;
-          const publishDate = m[2].slice(0, 10);
-          const summary = m[3].slice(0, 300);
-          results.push({ title: title.slice(0, 200), summary, source_url: 'https://www.landray.com.cn/activity', publish_date: publishDate });
+  // 方案1：从 __NUXT__ newsList 提取 name 字段
+  try {
+    const nuxtMatch = html.match(/newsList:\[([\s\S]*?)\]\s*[,}]/);
+    if (nuxtMatch) {
+      const rawStr = nuxtMatch[1];
+      
+      // 尝试从 NUXT 函数参数还原变量值
+      const funcMatch = html.match(/window\.__NUXT__=\(function\(([^)]*)\)\{return/);
+      const callMatch = html.match(/\}\)\(([^)]*)\)/);
+      let varValues = {};
+      if (funcMatch && callMatch) {
+        const params = funcMatch[1].split(',').map(s => s.trim());
+        const args = callMatch[1].split(',').map(s => s.trim());
+        for (let i = 0; i < params.length && i < args.length; i++) {
+          varValues[params[i]] = args[i].replace(/^["']|["']$/g, '');
         }
       }
-    } catch (e) {
-      logger.warn(`蓝凌 __NUXT__ 数据解析异常: ${e.message}`);
+      
+      // 提取 id, name, publishTime 配对
+      const idNameRegex = /id:(\d+),[\s\S]*?name:"([^"]+)"/g;
+      const ptDataRegex = /id:(\d+),[\s\S]*?publishTime:([A-Z_]\w*)/g;
+      const idPtMap = {};
+      let ptMatch;
+      while ((ptMatch = ptDataRegex.exec(rawStr)) !== null) {
+        const dateStr = varValues[ptMatch[2]] || '';
+        idPtMap[ptMatch[1]] = dateStr.slice(0, 10);
+      }
+      
+      let m;
+      while ((m = idNameRegex.exec(rawStr)) !== null) {
+        const title = m[2].trim();
+        const id = m[1];
+        if (title.length < 8 || title.length > 200) continue;
+        if (!policyRegex.test(title)) continue;
+        const publishDate = idPtMap[id] || null;
+        results.push({ title: title.slice(0, 200), summary: '', source_url: `https://www.landray.com.cn/activity/${id}`, publish_date: publishDate });
+      }
     }
+  } catch (e) {
+    logger.warn(`蓝凌 __NUXT__ 数据解析异常: ${e.message}`);
   }
 
-  // DOM 解析兜底
+  // 方案2：DOM 解析兜底
   if (results.length === 0) {
-    $('.new-about-company ul li, .new-about-company li').each((i, el) => {
+    $('.new-about-company li').each((i, el) => {
       if (i >= 20) return false;
       try {
         const $el = $(el);
-        const title = $el.find('.right-desc h1, .right-desc h3, h1, h3').first().text().trim();
+        const title = $el.find('h3').first().text().trim() || $el.find('h2, h1').first().text().trim();
         if (!title || title.length < 8 || title.length > 200) return;
-        if (!/政策|法规|合规|标准|认证|数字化|信创|电子签|签名|印章|数据安全|个人信息|行业/.test(title)) return;
+        if (!policyRegex.test(title)) return;
 
         const href = $el.find('a').first().attr('href') || '';
         let url = href;
         if (url.startsWith('/')) url = 'https://www.landray.com.cn' + url;
         if (!url.startsWith('http')) url = 'https://www.landray.com.cn/activity';
 
-        const dateText = $el.find('.date, .time, time').first().text().trim();
-        const dateMatch = dateText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+        const text = $el.text();
+        const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
         const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
 
-        const summary = $el.find('.article, .desc, p').first().text().trim();
+        const summary = $el.find('p, .desc, .summary').first().text().trim();
         results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
       } catch (e) { /* skip */ }
     });
+    
+    // 第二兜底：链接提取
+    if (results.length === 0) {
+      $('a[href*="/activity/"]').each((i, el) => {
+        if (i >= 20) return false;
+        try {
+          const $el = $(el);
+          const text = $el.text().trim().replace(/\s+/g, ' ');
+          const title = text.split(/\s{2,}/)[0].trim();
+          if (!title || title.length < 8 || title.length > 200) return;
+          if (!policyRegex.test(title)) return;
+
+          let url = $el.attr('href') || '';
+          if (url.startsWith('/')) url = 'https://www.landray.com.cn' + url;
+          if (!url.startsWith('http')) url = 'https://www.landray.com.cn/activity';
+
+          const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+          const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+          results.push({ title: title.slice(0, 200), summary: '', source_url: url, publish_date: publishDate });
+        } catch (e) { /* skip */ }
+      });
+    }
   }
 
   const recent = filterRecentResults(dedupe(results), 12);
   logger.info(`蓝凌行业动态过滤：${results.length}条 → 最近12个月${recent.length}条`);
+  return recent;
+}
+
+/**
+ * v6 新增：解析搜狗资讯搜索结果（覆盖更广的互联网新闻源）
+ */
+function parseSogouWeb(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+  const blacklist = /借钱|骗局|贷款|套现|到账|实际到账|怎么借|套路|招聘|考研|中奖|优惠券/;
+
+  $('.results .vrwrap, .results .rb').each((i, el) => {
+    if (i >= 15) return false;
+    try {
+      const $el = $(el);
+      const titleEl = $el.find('h3 a');
+      const title = titleEl.text().trim().replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+      if (!title || title.length < 8 || title.length > 200) return;
+      if (blacklist.test(title)) return;
+
+      let url = titleEl.attr('href') || '';
+      if (url.startsWith('/')) url = 'https://www.sogou.com' + url;
+
+      const summary = $el.find('.str_info, .str-text-info, p').first().text().trim();
+      const text = $el.text();
+      const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      let publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  const recent = filterRecentResults(dedupe(results), 12);
+  logger.info(`搜狗资讯搜索过滤：${results.length}条 → 最近12个月${recent.length}条`);
+  return recent;
+}
+
+/**
+ * v6 新增：解析零壹财经搜索结果
+ */
+function parse01Caijing(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  $('.news_item').each((i, el) => {
+    if (i >= 15) return false;
+    try {
+      const $el = $(el);
+      const titleEl = $el.find('.news_item_title a');
+      const title = titleEl.text().trim();
+      if (!title || title.length < 8 || title.length > 200) return;
+
+      let url = titleEl.attr('href') || '';
+      if (url.startsWith('//')) url = 'https:' + url;
+      else if (url.startsWith('/')) url = 'https://www.01caijing.com' + url;
+
+      // 日期格式：2021年12月28日 或 8月5日 14:00
+      const dateText = $el.find('.news_item_time span').first().text().trim();
+      let publishDate = null;
+      const dateMatch = dateText.match(/(20\d{2})[年/-](\d{1,2})[月/-](\d{1,2})/);
+      if (dateMatch) {
+        publishDate = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
+      }
+
+      const summary = $el.find('.news_item_main').first().text().trim();
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  const recent = filterRecentResults(dedupe(results), 24);  // 零壹财经数据可能偏旧，放宽到24个月
+  logger.info(`零壹财经搜索过滤：${results.length}条 → 最近24个月${recent.length}条`);
   return recent;
 }
 
