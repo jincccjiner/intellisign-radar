@@ -1,5 +1,5 @@
 /**
- * 生态伙伴动态采集器 v5
+ * 生态伙伴动态采集器 v6
  * 监控：安证通、立约笔、蓝凌、天威诚信、法大大生态、e签宝生态 等生态伙伴
  * 数据源：
  *  1. 各伙伴官网新闻/动态页面（SSR可爬取）
@@ -9,10 +9,10 @@
  *  5. 蓝凌 __NUXT__ 数据提取优化
  *  6. e签宝生态改用搜狗微信搜索（官网合作页为SPA无数据）
  * 含日期过滤（只保留最近12个月）+ 智能信号级别判定（v5放宽）
- * v5 修复：
- *  - e签宝生态数据源从官网SPA改为搜狗微信搜索+tsign.cn备用
- *  - 增强相似标题去重（标点符号归一化）
- *  - 信号级别判定放宽（medium条件新增更多关键词）
+ * v6 修复：
+ *  - e签宝生态搜狗微信关键词从3个增至6个（+伙伴大会/数字化/政务）
+ *  - 数据库写入 source_name 字段（官网/搜狗微信来源溯源）
+ *  - 竞品表和伙伴表新增 source_name 字段
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -30,7 +30,7 @@ const sogouWeixinSuffix = '&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&h
 const PARTNER_SOURCES = [
   {
     name: '安证通-官网API',
-    sources: [{ url: 'https://www.esa2000.com/portal/article/listInformationHomePage', parser: parseAnzhengtongAPI, isAPI: true }],
+    sources: [{ url: 'https://www.esa2000.com/portal/article/listInformationHomePage', parser: parseAnzhengtongAPI, isAPI: true, sourceName: '官网API' }],
     partnerName: '安证通',
     weixinSources: [
       { url: sogouWeixinBase + encodeURIComponent('安证通 电子签章') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
@@ -50,8 +50,8 @@ const PARTNER_SOURCES = [
   {
     name: '天威诚信-官网',
     sources: [
-      { url: 'https://www.itrus.com.cn/news/list_1.html', parser: parseItrusNews, retries: 2 },
-      { url: 'https://www.itrus.com.cn/news1/list_1.html', parser: parseItrusNews, retries: 2 },
+      { url: 'https://www.itrus.com.cn/news/list_1.html', parser: parseItrusNews, retries: 2, sourceName: '官网' },
+      { url: 'https://www.itrus.com.cn/news1/list_1.html', parser: parseItrusNews, retries: 2, sourceName: '官网' },
     ],
     partnerName: '天威诚信',
     weixinSources: [
@@ -61,7 +61,7 @@ const PARTNER_SOURCES = [
   },
   {
     name: '蓝凌-官网',
-    sources: [{ url: 'https://www.landray.com.cn/activity', parser: parseLandrayNews, retries: 2 }],
+    sources: [{ url: 'https://www.landray.com.cn/activity', parser: parseLandrayNews, retries: 2, sourceName: '官网' }],
     partnerName: '蓝凌',
     weixinSources: [
       { url: sogouWeixinBase + encodeURIComponent('蓝凌 OA 协同') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
@@ -70,7 +70,7 @@ const PARTNER_SOURCES = [
   },
   {
     name: '法大大-产品动态',
-    sources: [{ url: 'https://www.fadada.com/product-updates', parser: parseFaDaDaProduct, retries: 2 }],
+    sources: [{ url: 'https://www.fadada.com/product-updates', parser: parseFaDaDaProduct, retries: 2, sourceName: '官网' }],
     partnerName: '法大大生态',
     weixinSources: [
       { url: sogouWeixinBase + encodeURIComponent('法大大 合作 生态') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
@@ -81,13 +81,16 @@ const PARTNER_SOURCES = [
     // v5修复：官网合作页 /site/cooperate 是纯SPA营销页，无文章数据
     // 改用搜狗微信搜索作为主数据源 + tsign.cn备用
     sources: [
-      { url: 'https://tsign.cn/', parser: parseTsignPartner, retries: 2 },
+      { url: 'https://tsign.cn/', parser: parseTsignPartner, retries: 2, sourceName: 'tsign.cn' },
     ],
     partnerName: 'e签宝生态',
     weixinSources: [
       { url: sogouWeixinBase + encodeURIComponent('E签宝 生态 合作') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
       { url: sogouWeixinBase + encodeURIComponent('E签宝 渠道 代理') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
       { url: sogouWeixinBase + encodeURIComponent('E签宝 伙伴 战略') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('E签宝 伙伴大会') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('E签宝 数字化') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('E签宝 政务') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
     ],
   },
 ];
@@ -453,7 +456,7 @@ async function fetchPageWithRetry(url, maxRetries = 3) {
 }
 
 async function collectPartner() {
-  logger.info('开始采集生态伙伴动态（v5 官网+公众号+e签宝生态修复+去重增强+信号调优）...');
+  logger.info('开始采集生态伙伴动态（v6 官网+公众号+e签宝生态增强+来源溯源+去重增强+信号调优）...');
   let totalCount = 0;
   const today = beijingDate();
 
@@ -481,10 +484,10 @@ async function collectPartner() {
           const cat = classifyCategory(item.title);
           const severity = determinePartnerSeverity(item.title);
           db.run(
-            `INSERT INTO partner_news (id,partner_name,title,summary,source_url,publish_date,collect_date,category,severity,is_starred,notes,created_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+            `INSERT INTO partner_news (id,partner_name,title,summary,source_url,source_name,publish_date,collect_date,category,severity,is_starred,notes,created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [id, partner.partnerName, item.title, item.summary || '', item.source_url,
-              item.publish_date, today, cat, severity, 0, '', beijingISO()]
+              src.sourceName || '官网', item.publish_date, today, cat, severity, 0, '', beijingISO()]
           );
           totalCount++;
         }
@@ -512,10 +515,10 @@ async function collectPartner() {
             const cat = classifyCategory(item.title);
             const severity = determinePartnerSeverity(item.title);
             db.run(
-              `INSERT INTO partner_news (id,partner_name,title,summary,source_url,publish_date,collect_date,category,severity,is_starred,notes,created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+              `INSERT INTO partner_news (id,partner_name,title,summary,source_url,source_name,publish_date,collect_date,category,severity,is_starred,notes,created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
               [id, partner.partnerName, item.title, item.summary || '', item.source_url,
-                item.publish_date, today, cat, severity, 0, '', beijingISO()]
+                '搜狗微信', item.publish_date, today, cat, severity, 0, '', beijingISO()]
             );
             totalCount++;
           }
