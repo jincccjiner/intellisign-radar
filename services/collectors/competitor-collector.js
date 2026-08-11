@@ -17,8 +17,9 @@ const COMPETITOR_SOURCES = [
   {
     name: 'E签宝',
     sources: [
-      { url: 'https://www.esign.cn/news', parser: parseESignNews },
-      { url: 'https://www.esign.cn/blog', parser: parseESignBlog },
+      { url: 'https://www.esign.cn/news', parser: parseESignNews, retries: 3 },
+      { url: 'https://www.esign.cn/blog', parser: parseESignBlog, retries: 3 },
+      { url: 'https://tsign.cn/', parser: parseTsignHome, retries: 2 },  // 备用源
     ],
   },
   {
@@ -116,6 +117,35 @@ function parseESignBlog(html) {
       if (url.startsWith('/')) url = 'https://www.esign.cn' + url;
 
       results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  return dedupe(results);
+}
+
+/**
+ * 解析 tsign.cn 首页（E签宝备用数据源）
+ * 首页有少量 /c/ 文章链接作为补充
+ */
+function parseTsignHome(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  $('a[href*="/c/"]').each((i, el) => {
+    if (i >= 10) return false;
+    try {
+      const $el = $(el);
+      const title = $el.text().trim().replace(/\s+/g, ' ');
+      if (!title || title.length < 8 || title.length > 200) return;
+
+      let url = $el.attr('href') || '';
+      if (url.startsWith('/')) url = 'https://www.esign.cn' + url;
+
+      // 从 URL 提取日期（格式：/c/2026-04-09/xxx.shtml）
+      const dateMatch = url.match(/\/c\/(20\d{2}-\d{1,2}-\d{1,2})\//);
+      const publishDate = dateMatch ? dateMatch[1] : null;
+
+      results.push({ title: title.slice(0, 200), summary: title.slice(0, 300), source_url: url, publish_date: publishDate });
     } catch (e) { /* skip */ }
   });
 
@@ -284,29 +314,55 @@ function classifyCategory(title) {
   return 'other';
 }
 
-async function fetchPage(url) {
+async function fetchPage(url, timeout = 20000) {
   const resp = await axios.get(url, {
     headers: {
       'User-Agent': UA,
       'Accept': 'text/html,application/xhtml+xml',
       'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
     },
-    timeout: 20000,
+    timeout,
     maxRedirects: 5,
   });
   return resp.data;
 }
 
+/**
+ * 带重试机制的页面抓取
+ * E签宝等国内站点从海外服务器访问偶尔超时，增加重试可大幅提高成功率
+ */
+async function fetchPageWithRetry(url, maxRetries = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const timeout = 20000 + (attempt - 1) * 10000; // 20s, 30s, 40s
+      logger.info(`抓取 ${url} (第${attempt}次尝试, 超时${timeout / 1000}s)`);
+      const html = await fetchPage(url, timeout);
+      return html;
+    } catch (err) {
+      lastError = err;
+      logger.warn(`抓取 ${url} 第${attempt}次失败: ${err.message}`);
+      if (attempt < maxRetries) {
+        const wait = 2000 * attempt;
+        logger.info(`等待 ${wait / 1000}s 后重试...`);
+        await new Promise(r => setTimeout(r, wait));
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function collectCompetitor() {
-  logger.info('开始采集竞品动态（官网直接爬取模式 v3）...');
+  logger.info('开始采集竞品动态（官网直接爬取模式 v4，带重试机制）...');
   let totalCount = 0;
   const today = beijingDate();
 
   for (const competitor of COMPETITOR_SOURCES) {
     for (const src of competitor.sources) {
       try {
-        logger.info(`正在抓取[${competitor.name}]: ${src.url}`);
-        const html = await fetchPage(src.url);
+        const maxRetries = src.retries || 2;
+        logger.info(`正在抓取[${competitor.name}]: ${src.url} (最多${maxRetries}次重试)`);
+        const html = await fetchPageWithRetry(src.url, maxRetries);
         const items = src.parser(html);
         logger.info(`[${competitor.name}]解析到 ${items.length} 条新闻`);
 
@@ -327,7 +383,7 @@ async function collectCompetitor() {
 
         await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
       } catch (err) {
-        logger.error(`采集竞品[${competitor.name}] ${src.url} 异常: ${err.message}`);
+        logger.error(`采集竞品[${competitor.name}] ${src.url} 异常（重试耗尽）: ${err.message}`);
       }
     }
   }
