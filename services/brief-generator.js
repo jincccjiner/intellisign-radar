@@ -27,8 +27,8 @@ function classifySignal(item) {
   if (/战略|合作|签约|中标|收购|融资|上市|停用|强制|生效|大限|突破|卡位|冲突/.test(text)) return '高';
   if (item.severity === 'high') return '高';
 
-  // 中信号关键词
-  if (/升级|发布|新功能|上线|扩展|整合|增强|签署|合规|倒计时/.test(text)) return '中';
+  // 中信号关键词（与采集器 v8/v6 的 medium 判定规则对齐）
+  if (/升级|发布|新功能|上线|扩展|整合|增强|签署|合规|倒计时|生态|荣获|入选|产品|更新|接入|渠道|代理|会议|大会|峰会|入围|标杆|案例|认可|投资/.test(text)) return '中';
   if (item.severity === 'medium') return '中';
 
   // 默认观察
