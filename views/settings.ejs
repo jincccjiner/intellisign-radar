@@ -4,7 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>系统设置 - IntelliSign Radar</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .settings-section { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); padding: 20px; }
+    .settings-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #202124; border-bottom: 1px solid #f1f3f4; padding-bottom: 10px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+    .form-control { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; font-family: inherit; }
+    .form-hint { display: block; font-size: 12px; color: var(--text-light); margin-top: 4px; }
+    .job-list-v2 { list-style: none; }
+    .job-list-v2 li { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f3f4; font-size: 14px; }
+    .job-list-v2 li:last-child { border-bottom: none; }
+    .job-time { font-weight: 600; color: var(--primary); min-width: 80px; }
+    .job-desc { color: #5f6368; }
+    .ds-card { background: #f8f9fa; border-radius: 8px; padding: 14px; margin-bottom: 10px; }
+    .ds-name { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .ds-type { font-size: 12px; color: #5f6368; }
+    .ds-url { font-size: 11px; color: #9aa0a6; word-break: break-all; margin-top: 4px; }
+    .save-bar { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #f1f3f4; }
+    .about-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f3f4; font-size: 14px; }
+    .about-label { color: #5f6368; }
+    .about-value { font-weight: 600; }
+    @media (max-width: 1024px) { .settings-grid { grid-template-columns: 1fr; } }
+  </style>
 </head>
 <body>
   <aside class="sidebar">
@@ -18,44 +42,74 @@
       <a href="/collect-logs" class="nav-item">采集日志</a>
       <a href="/settings" class="nav-item active">系统设置</a>
     </nav>
-    <div class="sidebar-footer"><small>IntelliSign Radar v1.0</small></div>
+    <div class="sidebar-footer"><small>IntelliSign Radar v2.1</small></div>
   </aside>
   <main class="main-content">
     <header class="page-header"><h1>系统设置</h1></header>
-    <div class="card">
-      <div class="card-header"><h2>监控配置</h2></div>
-      <div class="card-body" id="configForm">
-        <div class="form-group">
-          <label>政策监控关键词</label>
-          <textarea id="cfgPolicyKeywords" rows="3" class="form-control"></textarea>
-          <small class="form-hint">多个关键词用逗号分隔</small>
+
+    <div class="settings-grid">
+      <!-- 左列：监控配置 -->
+      <div>
+        <div class="settings-section">
+          <h3>监控配置</h3>
+          <div class="form-group">
+            <label>政策监控关键词</label>
+            <textarea id="cfgPolicyKeywords" rows="3" class="form-control"></textarea>
+            <small class="form-hint">多个关键词用逗号分隔</small>
+          </div>
+          <div class="form-group">
+            <label>竞品名单</label>
+            <input type="text" id="cfgCompetitorList" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>生态伙伴名单</label>
+            <input type="text" id="cfgPartnerList" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>采集频率</label>
+            <select id="cfgCollectFreq" class="form-control">
+              <option value="daily">每天</option>
+              <option value="weekly">每周</option>
+            </select>
+          </div>
+          <div class="save-bar">
+            <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+          </div>
         </div>
-        <div class="form-group">
-          <label>竞品名单</label>
-          <input type="text" id="cfgCompetitorList" class="form-control">
+
+        <div class="settings-section" style="margin-top:16px">
+          <h3>定时任务</h3>
+          <ul class="job-list-v2">
+            <li><span class="job-time">每天 08:30</span><span class="job-desc">全量数据采集</span></li>
+            <li><span class="job-time">每天 18:00</span><span class="job-desc">生成日报摘要</span></li>
+            <li><span class="job-time">每周一 09:00</span><span class="job-desc">生成周报</span></li>
+          </ul>
         </div>
-        <div class="form-group">
-          <label>生态伙伴名单</label>
-          <input type="text" id="cfgPartnerList" class="form-control">
-        </div>
-        <div class="form-group">
-          <label>采集频率</label>
-          <select id="cfgCollectFreq" class="form-control">
-            <option value="daily">每天</option>
-            <option value="weekly">每周</option>
-          </select>
-        </div>
-        <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
       </div>
-    </div>
-    <div class="card" style="margin-top:16px">
-      <div class="card-header"><h2>定时任务</h2></div>
-      <div class="card-body">
-        <ul id="cronJobs" class="job-list">
-          <li>每天 08:30 - 全量数据采集</li>
-          <li>每天 18:00 - 生成日报摘要</li>
-          <li>每周一 09:00 - 生成周报</li>
-        </ul>
+
+      <!-- 右列：数据源 + 关于 -->
+      <div>
+        <div class="settings-section">
+          <h3>数据源管理</h3>
+          <div class="ds-card"><div class="ds-name">搜狗微信搜索</div><div class="ds-type">公众号文章 / 10个政策关键词 + 竞品/伙伴关键词</div></div>
+          <div class="ds-card"><div class="ds-name">E签宝官网</div><div class="ds-type">Nuxt SSR /news /blog + tsign.cn备用</div><div class="ds-url">esign.cn, tsign.cn</div></div>
+          <div class="ds-card"><div class="ds-name">法大大官网</div><div class="ds-type">SSR /company-news /product-updates /policies</div><div class="ds-url">fadada.com</div></div>
+          <div class="ds-card"><div class="ds-name">契约锁官网</div><div class="ds-type">Nuxt SSR /5个博客分类</div><div class="ds-url">qiyuesuo.com</div></div>
+          <div class="ds-card"><div class="ds-name">腾讯电子签</div><div class="ds-type">产品更新动态页(Docusaurus SSR) + 搜狗微信</div><div class="ds-url">qian.tencent.com/document/version/</div></div>
+          <div class="ds-card"><div class="ds-name">安证通官网</div><div class="ds-type">JSON API / 3个栏目(201/202/203)</div><div class="ds-url">esa2000.com</div></div>
+          <div class="ds-card"><div class="ds-name">天威诚信官网</div><div class="ds-type">传统SSR / 轮播+列表</div><div class="ds-url">itrus.com.cn</div></div>
+          <div class="ds-card"><div class="ds-name">蓝凌官网</div><div class="ds-type">Nuxt SSR / __NUXT__数据提取</div><div class="ds-url">landray.com.cn</div></div>
+        </div>
+
+        <div class="settings-section" style="margin-top:16px">
+          <h3>关于系统</h3>
+          <div class="about-row"><span class="about-label">系统名称</span><span class="about-value">IntelliSign Radar</span></div>
+          <div class="about-row"><span class="about-label">版本</span><span class="about-value">v2.1</span></div>
+          <div class="about-row"><span class="about-label">定位</span><span class="about-value">电子签章行业情报雷达</span></div>
+          <div class="about-row"><span class="about-label">采集器版本</span><span class="about-value">政策v5 / 竞品v7 / 伙伴v5</span></div>
+          <div class="about-row"><span class="about-label">数据库</span><span class="about-value">SQLite (sql.js WASM)</span></div>
+          <div class="about-row"><span class="about-label">部署</span><span class="about-value">Railway 云端</span></div>
+        </div>
       </div>
     </div>
   </main>
