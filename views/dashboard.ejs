@@ -5,6 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IntelliSign Radar - 电子签章行业情报雷达</title>
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .stats-cards { grid-template-columns: repeat(4, 1fr); }
+    .stat-card { position: relative; }
+    .stat-badge { position: absolute; top: 8px; right: 12px; background: #ea4335; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+    .chart-row { display: flex; gap: 16px; margin-bottom: 16px; }
+    .chart-card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); padding: 20px; }
+    .chart-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #202124; }
+    .chart-card.canvas-wrap { flex: 1; min-width: 0; }
+    .comp-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .comp-bar-name { width: 80px; font-size: 13px; font-weight: 600; text-align: right; flex-shrink: 0; }
+    .comp-bar-track { flex: 1; height: 24px; background: #f1f3f4; border-radius: 12px; overflow: hidden; position: relative; }
+    .comp-bar-fill { height: 100%; border-radius: 12px; transition: width 0.8s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 11px; font-weight: 600; color: #fff; min-width: 28px; }
+    .timeline-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .signal-ring { display: flex; gap: 20px; justify-content: center; padding: 10px 0; }
+    .signal-ring-item { text-align: center; }
+    .signal-ring-circle { width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; margin: 0 auto 6px; }
+    .signal-ring-label { font-size: 12px; color: #5f6368; }
+    .alert-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f1f3f4; }
+    .alert-item:last-child { border-bottom: none; }
+    .alert-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+    @media (max-width: 1200px) { .chart-row { flex-direction: column; } }
+  </style>
 </head>
 <body>
   <aside class="sidebar">
@@ -12,15 +34,15 @@
       <div class="brand-text">IntelliSign<small>Radar</small></div>
     </div>
     <nav class="sidebar-nav">
-      <a href="/" class="nav-item <%= page==='dashboard'?'active':'' %>">总览仪表盘</a>
-      <a href="/policy" class="nav-item <%= page==='policy'?'active':'' %>">政策法规</a>
-      <a href="/competitor" class="nav-item <%= page==='competitor'?'active':'' %>">竞品动态</a>
-      <a href="/partner" class="nav-item <%= page==='partner'?'active':'' %>">生态伙伴</a>
-      <a href="/briefs" class="nav-item <%= page==='briefs'?'active':'' %>">情报简报</a>
-      <a href="/collect-logs" class="nav-item <%= page==='collect-logs'?'active':'' %>">采集日志</a>
-      <a href="/settings" class="nav-item <%= page==='settings'?'active':'' %>">系统设置</a>
+      <a href="/" class="nav-item active">总览仪表盘</a>
+      <a href="/policy" class="nav-item">政策法规<span class="nav-badge" id="navPolicyBadge" style="display:none"></span></a>
+      <a href="/competitor" class="nav-item">竞品动态<span class="nav-badge" id="navCompBadge" style="display:none"></span></a>
+      <a href="/partner" class="nav-item">生态伙伴</a>
+      <a href="/briefs" class="nav-item">情报简报</a>
+      <a href="/collect-logs" class="nav-item">采集日志</a>
+      <a href="/settings" class="nav-item">系统设置</a>
     </nav>
-    <div class="sidebar-footer"><small>IntelliSign Radar v1.0</small></div>
+    <div class="sidebar-footer"><small>IntelliSign Radar v2.1</small></div>
   </aside>
   <main class="main-content">
     <header class="page-header">
@@ -30,41 +52,85 @@
         <button class="btn btn-outline" onclick="generateBrief()">生成周报</button>
       </div>
     </header>
+
+    <!-- 四大统计卡片 -->
     <section class="stats-cards">
       <div class="stat-card" onclick="location.href='/policy'">
-        <div class="stat-icon policy-icon"></div>
+        <div class="stat-icon policy-icon">📜</div>
         <div class="stat-info"><div class="stat-number" id="policyCount">-</div><div class="stat-label">政策法规</div></div>
+        <div class="stat-badge" id="policyBadge" style="display:none"></div>
       </div>
       <div class="stat-card" onclick="location.href='/competitor'">
-        <div class="stat-icon comp-icon"></div>
+        <div class="stat-icon comp-icon">🔍</div>
         <div class="stat-info"><div class="stat-number" id="competitorCount">-</div><div class="stat-label">竞品动态</div></div>
+        <div class="stat-badge" id="compBadge" style="display:none"></div>
       </div>
       <div class="stat-card" onclick="location.href='/partner'">
-        <div class="stat-icon partner-icon"></div>
+        <div class="stat-icon partner-icon">🤝</div>
         <div class="stat-info"><div class="stat-number" id="partnerCount">-</div><div class="stat-label">生态伙伴</div></div>
+        <div class="stat-badge" id="partnerBadge" style="display:none"></div>
       </div>
       <div class="stat-card" onclick="location.href='/briefs'">
-        <div class="stat-icon brief-icon"></div>
+        <div class="stat-icon brief-icon">📊</div>
         <div class="stat-info"><div class="stat-number" id="briefCount">-</div><div class="stat-label">情报简报</div></div>
       </div>
     </section>
+
+    <!-- 信号分布 + 竞品对比 -->
+    <div class="chart-row">
+      <div class="chart-card canvas-wrap" style="max-width:320px">
+        <h3>信号分布</h3>
+        <div class="signal-ring">
+          <div class="signal-ring-item">
+            <div class="signal-ring-circle" style="background:#fce8e6;color:#ea4335" id="sigHigh">0</div>
+            <div class="signal-ring-label">高危 [高]</div>
+          </div>
+          <div class="signal-ring-item">
+            <div class="signal-ring-circle" style="background:#fef7e0;color:#f9ab00" id="sigMedium">0</div>
+            <div class="signal-ring-label">关注 [中]</div>
+          </div>
+          <div class="signal-ring-item">
+            <div class="signal-ring-circle" style="background:#e8f0fe;color:#1a73e8" id="sigInfo">0</div>
+            <div class="signal-ring-label">一般 [观察]</div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-card canvas-wrap">
+        <h3>竞品动态量对比</h3>
+        <div id="compBarChart"></div>
+      </div>
+      <div class="chart-card canvas-wrap" style="max-width:260px">
+        <h3>伙伴动态量对比</h3>
+        <div id="partnerBarChart"></div>
+      </div>
+    </div>
+
+    <!-- 7天趋势图 + 预警 -->
+    <div class="chart-row">
+      <div class="chart-card canvas-wrap">
+        <h3>近7天情报采集趋势</h3>
+        <canvas id="trendCanvas" height="180"></canvas>
+      </div>
+      <div class="chart-card canvas-wrap" style="max-width:380px">
+        <h3 style="color:#ea4335">⚠ 风险预警</h3>
+        <div id="alertsPanel"><p class="empty-text">暂无预警</p></div>
+      </div>
+    </div>
+
+    <!-- 最近动态双栏 -->
     <section class="two-col">
       <div class="col-7">
         <div class="card">
-          <div class="card-header"><h2>最近政策法规</h2><a href="/policy" class="link">查看全部</a></div>
+          <div class="card-header"><h2>最近政策法规</h2><a href="/policy" class="link">查看全部 →</a></div>
           <div class="card-body" id="recentPolicy"><p class="empty-text">加载中...</p></div>
         </div>
         <div class="card" style="margin-top:16px">
-          <div class="card-header"><h2>最近竞品动态</h2><a href="/competitor" class="link">查看全部</a></div>
+          <div class="card-header"><h2>最近竞品动态</h2><a href="/competitor" class="link">查看全部 →</a></div>
           <div class="card-body" id="recentComp"><p class="empty-text">加载中...</p></div>
         </div>
       </div>
       <div class="col-5">
         <div class="card">
-          <div class="card-header"><h2>风险预警</h2></div>
-          <div class="card-body" id="alerts"><p class="empty-text">暂无预警</p></div>
-        </div>
-        <div class="card" style="margin-top:16px">
           <div class="card-header"><h2>分类统计</h2></div>
           <div class="card-body" id="categoryStats"><p class="empty-text">加载中...</p></div>
         </div>
@@ -72,6 +138,222 @@
     </section>
   </main>
   <script src="/js/app.js"></script>
-  <script>loadDashboard();</script>
+  <script>
+  async function loadDashboardV2() {
+    const data = await api('/stats');
+    if (!data) return;
+
+    // === 基本统计 ===
+    document.getElementById('policyCount').textContent = data.counts.policy;
+    document.getElementById('competitorCount').textContent = data.counts.competitor;
+    document.getElementById('partnerCount').textContent = data.counts.partner;
+    document.getElementById('briefCount').textContent = data.counts.brief;
+
+    // 24h新增角标
+    if (data.recent24h) {
+      if (data.recent24h.policy > 0) { document.getElementById('policyBadge').textContent = '+' + data.recent24h.policy; document.getElementById('policyBadge').style.display = 'block'; }
+      if (data.recent24h.competitor > 0) { document.getElementById('compBadge').textContent = '+' + data.recent24h.competitor; document.getElementById('compBadge').style.display = 'block'; }
+      if (data.recent24h.partner > 0) { document.getElementById('partnerBadge').textContent = '+' + data.recent24h.partner; document.getElementById('partnerBadge').style.display = 'block'; }
+    }
+
+    // === 信号分布 ===
+    if (data.signalDist) {
+      document.getElementById('sigHigh').textContent = data.signalDist.high || 0;
+      document.getElementById('sigMedium').textContent = data.signalDist.medium || 0;
+      document.getElementById('sigInfo').textContent = data.signalDist.info || 0;
+    }
+
+    // 侧边栏预警角标
+    if (data.signalDist && data.signalDist.high > 0) {
+      const b = document.getElementById('navPolicyBadge');
+      b.textContent = data.signalDist.high;
+      b.style.display = 'inline-block';
+    }
+
+    // === 竞品对比柱状图 ===
+    const compColors = { 'E签宝': '#ea4335', '法大大': '#1a73e8', '契约锁': '#f9ab00', '腾讯电子签': '#34a853' };
+    if (data.competitorBreakdown && data.competitorBreakdown.length > 0) {
+      const maxCnt = Math.max(...data.competitorBreakdown.map(c => c.cnt), 1);
+      document.getElementById('compBarChart').innerHTML = data.competitorBreakdown.map(c => {
+        const pct = Math.max((c.cnt / maxCnt) * 100, 5);
+        const color = compColors[c.competitor_name] || '#7b61ff';
+        return `<div class="comp-bar-row">
+          <div class="comp-bar-name">${escHtml(c.competitor_name)}</div>
+          <div class="comp-bar-track"><div class="comp-bar-fill" style="width:${pct}%;background:${color}">${c.cnt}</div></div>
+        </div>`;
+      }).join('');
+    }
+
+    // === 伙伴对比柱状图 ===
+    const partColors = ['#7b61ff', '#1a73e8', '#34a853', '#f9ab00', '#ea4335', '#00bcd4'];
+    if (data.partnerBreakdown && data.partnerBreakdown.length > 0) {
+      const maxP = Math.max(...data.partnerBreakdown.map(c => c.cnt), 1);
+      document.getElementById('partnerBarChart').innerHTML = data.partnerBreakdown.map((c, i) => {
+        const pct = Math.max((c.cnt / maxP) * 100, 5);
+        return `<div class="comp-bar-row">
+          <div class="comp-bar-name" style="width:70px">${escHtml(c.partner_name)}</div>
+          <div class="comp-bar-track"><div class="comp-bar-fill" style="width:${pct}%;background:${partColors[i % partColors.length]}">${c.cnt}</div></div>
+        </div>`;
+      }).join('');
+    }
+
+    // === 7天趋势图 ===
+    if (data.trend && data.trend.length > 0) {
+      drawTrendChart(data.trend);
+    }
+
+    // === 预警面板 ===
+    const alertsEl = document.getElementById('alertsPanel');
+    if (data.alerts && data.alerts.length > 0) {
+      alertsEl.innerHTML = data.alerts.map(a => `
+        <div class="alert-item">
+          <div class="alert-dot" style="background:#ea4335"></div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600;line-height:1.4">${escHtml(a.title)}</div>
+            <div style="font-size:12px;color:#5f6368;margin-top:2px">${formatDate(a.publish_date)} · ${a.source_name || ''}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // === 最近政策 ===
+    const policyEl = document.getElementById('recentPolicy');
+    if (data.recentIntel && data.recentIntel.length > 0) {
+      policyEl.innerHTML = data.recentIntel.map(i => `
+        <div class="list-item">
+          <div class="list-item-title">${severityBadge(i.severity)} ${escHtml(i.title)}</div>
+          <div class="list-item-meta">
+            <span>${formatDate(i.publish_date)}</span>
+            <span>${i.source_name || ''}</span>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      policyEl.innerHTML = '<p class="empty-text">暂无数据</p>';
+    }
+
+    // === 最近竞品 ===
+    const compEl = document.getElementById('recentComp');
+    if (data.recentComp && data.recentComp.length > 0) {
+      compEl.innerHTML = data.recentComp.map(i => `
+        <div class="list-item">
+          <div class="list-item-title">${categoryBadge(i.category)} <strong>[${escHtml(i.competitor_name)}]</strong> ${escHtml(i.title)}</div>
+          <div class="list-item-meta"><span>${formatDate(i.publish_date)}</span></div>
+        </div>
+      `).join('');
+    } else {
+      compEl.innerHTML = '<p class="empty-text">暂无数据</p>';
+    }
+
+    // === 分类统计 ===
+    const catEl = document.getElementById('categoryStats');
+    if (data.categories && data.categories.length > 0) {
+      catEl.innerHTML = data.categories.map(c => `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f3f4">
+          <span>${c.category === 'policy' ? '政策法规' : c.category}</span>
+          <strong>${c.cnt}</strong>
+        </div>
+      `).join('');
+    } else {
+      catEl.innerHTML = '<p class="empty-text">暂无数据</p>';
+    }
+  }
+
+  function drawTrendChart(trend) {
+    const canvas = document.getElementById('trendCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.parentElement.clientWidth - 40;
+    const H = 160;
+    canvas.width = W;
+    canvas.height = H;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+
+    const maxVal = Math.max(...trend.map(t => t.cnt), 1);
+    const pad = { l: 40, r: 10, t: 10, b: 30 };
+    const chartW = W - pad.l - pad.r;
+    const chartH = H - pad.t - pad.b;
+
+    // 背景网格
+    ctx.strokeStyle = '#f1f3f4';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = pad.t + (chartH / 4) * i;
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    }
+
+    // 数据点
+    const step = trend.length > 1 ? chartW / (trend.length - 1) : chartW;
+    const points = trend.map((t, i) => ({
+      x: pad.l + step * i,
+      y: pad.t + chartH - (t.cnt / maxVal) * chartH,
+      cnt: t.cnt,
+      date: t.collect_date
+    }));
+
+    // 渐变填充
+    const grad = ctx.createLinearGradient(0, pad.t, 0, H - pad.b);
+    grad.addColorStop(0, 'rgba(26,115,232,0.25)');
+    grad.addColorStop(1, 'rgba(26,115,232,0.02)');
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, H - pad.b);
+    points.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(points[points.length-1].x, H - pad.b);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // 折线
+    ctx.beginPath();
+    ctx.strokeStyle = '#1a73e8';
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+
+    // 数据圆点
+    points.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#1a73e8';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+
+    // X轴日期标签
+    ctx.fillStyle = '#5f6368';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    points.forEach(p => {
+      ctx.fillText(p.date ? p.date.slice(5) : '', p.x, H - 8);
+    });
+
+    // Y轴数值
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= 4; i++) {
+      const val = Math.round(maxVal * (4 - i) / 4);
+      const y = pad.t + (chartH / 4) * i;
+      ctx.fillText(val, pad.l - 6, y + 4);
+    }
+
+    // 数值标签
+    ctx.fillStyle = '#1a73e8';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    points.forEach(p => {
+      if (p.cnt > 0) ctx.fillText(p.cnt, p.x, p.y - 8);
+    });
+  }
+
+  function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  loadDashboardV2();
+  </script>
 </body>
 </html>
