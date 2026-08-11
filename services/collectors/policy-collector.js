@@ -1,7 +1,12 @@
 /**
- * 政策法规采集器 v3
- * 多数据源：搜狗微信搜索（多关键词）+ 法大大政策法规专栏
- * 含日期过滤（只保留最近12个月）
+ * 政策法规采集器 v4
+ * 数据源：
+ *  1. 搜狗微信搜索（10个关键词，覆盖电子签名全领域政策）
+ *  2. 法大大政策法规专栏
+ *  3. 契约锁行业资讯页（行业政策解读）
+ *  4. 天威诚信新闻（CA/认证领域政策）
+ *  5. 蓝凌行业动态（数字化办公政策）
+ *  含日期过滤（只保留最近12个月）+ 智能信号级别判定
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -12,60 +17,47 @@ const { beijingISO, beijingDate } = require('../time-util');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
-// 政策法规数据源
+// ====== 政策法规数据源 ======
 const POLICY_SOURCES = [
-  // 搜狗微信搜索 - 多关键词（sort=time 按时间排序）
-  {
-    name: '搜狗微信-电子签名政策',
-    url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E7%AD%BE%E5%90%8D+%E6%94%BF%E7%AD%96%E6%B3%95%E8%A7%84+2026&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time',
-    parser: parseSogouWeixin,
-    retries: 2,
-  },
-  {
-    name: '搜狗微信-电子签章政策',
-    url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E7%AD%BE%E7%AB%A0+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time',
-    parser: parseSogouWeixin,
-    retries: 2,
-  },
-  {
-    name: '搜狗微信-电子认证新规',
-    url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E8%AE%A4%E8%AF%81+%E6%96%B0%E8%A7%84+%E5%90%88%E8%A7%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time',
-    parser: parseSogouWeixin,
-    retries: 2,
-  },
-  {
-    name: '搜狗微信-数据跨境规定',
-    url: 'https://weixin.sogou.com/weixin?type=2&query=%E6%95%B0%E6%8D%AE%E8%B7%A8%E5%A2%83+%E8%A7%84%E5%AE%9A+%E6%96%B0%E8%A7%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time',
-    parser: parseSogouWeixin,
-    retries: 2,
-  },
-  {
-    name: '搜狗微信-电子合同新规',
-    url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E5%90%88%E5%90%8C+%E6%96%B0%E8%A7%84+%E6%96%BD%E8%A1%8C&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time',
-    parser: parseSogouWeixin,
-    retries: 2,
-  },
-  // 法大大政策法规专栏（补充）
-  {
-    name: '法大大-政策法规',
-    url: 'https://www.fadada.com/policies',
-    parser: parseFaDaDaPolicies,
-    retries: 1,
-  },
+  // 搜狗微信搜索 - 10个关键词（sort=time 按时间排序）
+  { name: '搜狗微信-电子签名政策', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E7%AD%BE%E5%90%8D+%E6%94%BF%E7%AD%96%E6%B3%95%E8%A7%84+2026&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-电子签章政策', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E7%AD%BE%E7%AB%A0+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-电子认证新规', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E8%AE%A4%E8%AF%81+%E6%96%B0%E8%A7%84+%E5%90%88%E8%A7%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-数据跨境规定', url: 'https://weixin.sogou.com/weixin?type=2&query=%E6%95%B0%E6%8D%AE%E8%B7%A8%E5%A2%83+%E8%A7%84%E5%AE%9A+%E6%96%B0%E8%A7%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-电子合同新规', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E5%90%88%E5%90%8C+%E6%96%B0%E8%A7%84+%E6%96%BD%E8%A1%8C&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  // v4 新增关键词
+  { name: '搜狗微信-密码法商用密码', url: 'https://weixin.sogou.com/weixin?type=2&query=%E5%AF%86%E7%A0%81%E6%B3%95+%E5%95%86%E7%94%A8%E5%AF%86%E7%A0%81+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-CA认证电子存证', url: 'https://weixin.sogou.com/weixin?type=2&query=CA%E8%AE%A4%E8%AF%81+%E7%94%B5%E5%AD%90%E5%AD%98%E8%AF%81+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-可信签名数字证书', url: 'https://weixin.sogou.com/weixin?type=2&query=%E5%8F%AF%E4%BF%A1%E7%AD%BE%E5%90%8D+%E6%95%B0%E5%AD%97%E8%AF%81%E4%B9%A6+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-电子印章标准规范', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E5%8D%B0%E7%AB%A0+%E6%A0%87%E5%87%86+%E8%A7%84%E8%8C%83+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-数字化转型政务服务', url: 'https://weixin.sogou.com/weixin?type=2&query=%E6%95%B0%E5%AD%97%E5%8C%96%E8%BD%AC%E5%9E%8B+%E6%94%BF%E5%8A%A1%E6%9C%8D%E5%8A%A1+%E7%94%B5%E5%AD%90%E7%AD%BE%E7%AB%A0&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+
+  // 法大大政策法规专栏
+  { name: '法大大-政策法规', url: 'https://www.fadada.com/policies', parser: parseFaDaDaPolicies, retries: 2 },
+
+  // v4 新增：契约锁行业资讯（行业政策解读文章）
+  { name: '契约锁-行业资讯', url: 'https://www.qiyuesuo.com/en-US/us/detail/blogIndustry', parser: parseQiyuesuoIndustry, retries: 2 },
+
+  // v4 新增：天威诚信新闻（CA/认证领域政策动态）
+  { name: '天威诚信-新闻', url: 'https://www.itrus.com.cn/news/list_1.html', parser: parseItrusPolicy, retries: 2 },
+
+  // v4 新增：蓝凌行业动态（数字化办公/信创政策）
+  { name: '蓝凌-行业动态', url: 'https://www.landray.com.cn/activity', parser: parseLandrayPolicy, retries: 2 },
 ];
 
 // 权威来源标识
 const AUTHORITATIVE_SOURCES = [
   'gov.cn', 'miit.gov.cn', 'cac.gov.cn', 'sca.gov.cn',
   'mof.gov.cn', 'ndrc.gov.cn', 'std.samr.gov.cn',
-  'openstd.samr.gov.cn', 'gmstandard.org'
+  'openstd.samr.gov.cn', 'gmstandard.org', 'npc.gov.cn',
+  'court.gov.cn', 'spp.gov.cn', 'mps.gov.cn'
 ];
+
+// 高信号关键词（出现这些词则 severity=high）
+const HIGH_SIGNAL_KEYWORDS = /新规|施行|强制|禁止|处罚|整改|废止|修订|征求意见|国家标准|行业标准|国务院|人大常委会/;
 
 // ====== 工具函数 ======
 
-/**
- * 日期过滤：只保留最近 N 个月的文章
- */
 function filterRecentResults(results, months = 12) {
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - months);
@@ -86,16 +78,25 @@ function dedupe(results) {
   });
 }
 
+function determineSeverity(item) {
+  const text = (item.title || '') + ' ' + (item.summary || '');
+  // 权威来源 = high
+  if (AUTHORITATIVE_SOURCES.some(s => (item.source_url || '').includes(s) || text.includes(s))) return 'high';
+  // 高信号关键词 = high
+  if (HIGH_SIGNAL_KEYWORDS.test(text)) return 'high';
+  // 中等信号关键词
+  if (/规范|标准|管理办法|实施细则|通知|公告|指引|指南|试点/.test(text)) return 'medium';
+  return 'info';
+}
+
 // ====== 解析函数 ======
 
 /**
- * 解析搜狗微信搜索结果（政策法规相关）
- * 时间格式：document.write(timeConvert('timestamp'))
+ * 解析搜狗微信搜索结果
  */
 function parseSogouWeixin(html) {
   const $ = cheerio.load(html);
   const results = [];
-
   const blacklist = /借钱|骗局|贷款|套现|到账|实际到账|怎么借|套路|招聘|考研|复试|中奖|优惠券|pos机|刷卡机|个人pos/;
 
   $('ul.news-list > li').each((i, li) => {
@@ -110,7 +111,6 @@ function parseSogouWeixin(html) {
       let url = titleEl.attr('href') || '';
       if (url.startsWith('/')) url = 'https://weixin.sogou.com' + url;
 
-      // 时间戳提取
       const timeMatch = $li.html().match(/timeConvert\('(\d+)'\)/);
       let publishDate = null;
       if (timeMatch) {
@@ -120,12 +120,10 @@ function parseSogouWeixin(html) {
       }
 
       const summary = $li.find('.txt-box p').text().trim();
-
       results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
     } catch (e) { /* skip */ }
   });
 
-  // 过滤最近12个月
   const recent = filterRecentResults(dedupe(results), 12);
   logger.info(`搜狗微信政策搜索过滤：${results.length}条 → 最近12个月${recent.length}条`);
   return recent;
@@ -139,7 +137,7 @@ function parseFaDaDaPolicies(html) {
   const results = [];
 
   $('a[href*="/article/"]').each((i, el) => {
-    if (i >= 15) return false;
+    if (i >= 20) return false;
     try {
       const $el = $(el);
       const title = $el.find('strong, b, .title').first().text().trim()
@@ -159,18 +157,168 @@ function parseFaDaDaPolicies(html) {
         .filter(t => t.length > 20 && t !== title)
         .slice(0, 1)[0] || '';
 
-      results.push({
-        title: title.slice(0, 200),
-        summary: snippet.slice(0, 300),
-        source_url: url,
-        publish_date: publishDate,
-      });
+      results.push({ title: title.slice(0, 200), summary: snippet.slice(0, 300), source_url: url, publish_date: publishDate });
     } catch (e) { /* skip */ }
   });
 
-  // 过滤最近12个月
   const recent = filterRecentResults(dedupe(results), 12);
   logger.info(`法大大政策法规过滤：${results.length}条 → 最近12个月${recent.length}条`);
+  return recent;
+}
+
+/**
+ * v4 新增：解析契约锁行业资讯页
+ * 结构：ul.blog-list > li > a[href*="/blog/"] > div.content > div.title + div.text + div.right-text(日期)
+ */
+function parseQiyuesuoIndustry(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  $('ul.blog-list > li').each((i, li) => {
+    if (i >= 15) return false;
+    try {
+      const $li = $(li);
+      const title = $li.find('.title, .content .title, h3, h2').first().text().trim();
+      if (!title || title.length < 8 || title.length > 200) return;
+
+      const href = $li.find('a').attr('href') || '';
+      let url = href;
+      if (url.startsWith('/')) url = 'https://www.qiyuesuo.com' + url;
+
+      const dateText = $li.find('.right-text, .content-bottom .right-text').first().text().trim();
+      const dateMatch = dateText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+      const summary = $li.find('.text, .content .text, p').first().text().trim();
+
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  const recent = filterRecentResults(dedupe(results), 12);
+  logger.info(`契约锁行业资讯过滤：${results.length}条 → 最近12个月${recent.length}条`);
+  return recent;
+}
+
+/**
+ * v4 新增：解析天威诚信新闻页
+ * 结构：div.swiper-slide 含 h2(标题) + p(摘要) + h3(日期)
+ */
+function parseItrusPolicy(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  // 轮播新闻（有日期和摘要）
+  $('.swiper-slide').each((i, el) => {
+    if (i >= 15) return false;
+    try {
+      const $el = $(el);
+      const title = $el.find('h2 a, h2').first().text().trim();
+      if (!title || title.length < 8 || title.length > 200) return;
+
+      const href = $el.find('a').attr('href') || '';
+      let url = href;
+      if (url.startsWith('/')) url = 'https://www.itrus.com.cn' + url;
+      if (!url.startsWith('http')) url = 'https://www.itrus.com.cn/news/list_1.html';
+
+      const dateText = $el.find('h3, .date, time').first().text().trim();
+      const dateMatch = dateText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+      const summary = $el.find('p, .desc').first().text().trim();
+
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  // 常规列表
+  $('ul li, .news-list li').each((i, el) => {
+    if (i >= 15) return false;
+    try {
+      const $el = $(el);
+      const title = $el.find('a, h3, h2, p').first().text().trim();
+      if (!title || title.length < 8 || title.length > 200) return;
+
+      const href = $el.find('a').attr('href') || '';
+      let url = href;
+      if (url.startsWith('/')) url = 'https://www.itrus.com.cn' + url;
+      if (!url.startsWith('http')) url = 'https://www.itrus.com.cn/news/list_1.html';
+
+      const text = $el.text();
+      const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+      results.push({ title: title.slice(0, 200), summary: '', source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  const recent = filterRecentResults(dedupe(results), 12);
+  logger.info(`天威诚信新闻过滤：${results.length}条 → 最近12个月${recent.length}条`);
+  return recent;
+}
+
+/**
+ * v4 新增：解析蓝凌活动/新闻页（提取政策相关动态）
+ * 结构：div.new-about-company ul > li > div.right-desc > h1(标题) + div.date + div.article
+ */
+function parseLandrayPolicy(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  // 尝试从 __NUXT__ 数据中提取（含完整 JSON）
+  const nuxtMatch = html.match(/window\.__NUXT__\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/);
+  if (nuxtMatch) {
+    try {
+      // __NUXT__ 包含 newsList 数组
+      const nuxtStr = nuxtMatch[1];
+      const newsListMatch = nuxtStr.match(/newsList\s*:\s*(\[[\s\S]*?\])\s*[,}]/);
+      if (newsListMatch) {
+        // 简易提取：逐条匹配 title/publishTime/summary
+        const itemRegex = /\{[^}]*title\s*:\s*["']([^"']+)["'][^}]*publishTime\s*:\s*["']([^"']*)["'][^}]*summary\s*:\s*["']([^"']*)["'][^}]*\}/g;
+        let m;
+        while ((m = itemRegex.exec(newsListMatch[1])) !== null) {
+          const title = m[1].trim();
+          if (title.length < 8 || title.length > 200) continue;
+          // 只保留与政策/行业/数字化相关的文章
+          if (!/政策|法规|合规|标准|认证|数字化|信创|电子签|签名|印章|数据安全|个人信息|行业/.test(title)) continue;
+          const publishDate = m[2].slice(0, 10);
+          const summary = m[3].slice(0, 300);
+          results.push({ title: title.slice(0, 200), summary, source_url: 'https://www.landray.com.cn/activity', publish_date: publishDate });
+        }
+      }
+    } catch (e) {
+      logger.warn(`蓝凌 __NUXT__ 数据解析异常: ${e.message}`);
+    }
+  }
+
+  // DOM 解析兜底
+  if (results.length === 0) {
+    $('.new-about-company ul li, .new-about-company li').each((i, el) => {
+      if (i >= 20) return false;
+      try {
+        const $el = $(el);
+        const title = $el.find('.right-desc h1, .right-desc h3, h1, h3').first().text().trim();
+        if (!title || title.length < 8 || title.length > 200) return;
+        // 只保留与政策/行业相关的
+        if (!/政策|法规|合规|标准|认证|数字化|信创|电子签|签名|印章|数据安全|个人信息|行业/.test(title)) return;
+
+        const href = $el.find('a').first().attr('href') || '';
+        let url = href;
+        if (url.startsWith('/')) url = 'https://www.landray.com.cn' + url;
+        if (!url.startsWith('http')) url = 'https://www.landray.com.cn/activity';
+
+        const dateText = $el.find('.date, .time, time').first().text().trim();
+        const dateMatch = dateText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+        const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+        const summary = $el.find('.article, .desc, p').first().text().trim();
+        results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+      } catch (e) { /* skip */ }
+    });
+  }
+
+  const recent = filterRecentResults(dedupe(results), 12);
+  logger.info(`蓝凌行业动态过滤：${results.length}条 → 最近12个月${recent.length}条`);
   return recent;
 }
 
@@ -184,6 +332,8 @@ function classifySubCategory(title, summary) {
   if (/电子合同|合同|网签/.test(text)) return 'contract';
   if (/数据|跨境|个人信息|隐私/.test(text)) return 'data';
   if (/贸易|外贸|跨境/.test(text)) return 'trade';
+  if (/信创|国产化|自主可控/.test(text)) return 'xinchuang';
+  if (/标准|规范|指南|指引/.test(text)) return 'standard';
   return null;
 }
 
@@ -211,16 +361,14 @@ async function fetchPageWithRetry(url, maxRetries = 3) {
     } catch (err) {
       lastError = err;
       logger.warn(`抓取 ${url} 第${attempt}次失败: ${err.message}`);
-      if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 2000 * attempt));
-      }
+      if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
     }
   }
   throw lastError;
 }
 
 async function collectPolicy() {
-  logger.info('开始采集政策法规情报（v3 多源+日期过滤）...');
+  logger.info('开始采集政策法规情报（v4 多源+公众号+官网+智能信号）...');
   let totalCount = 0;
   const today = beijingDate();
 
@@ -236,9 +384,7 @@ async function collectPolicy() {
         const existing = db.queryOne('SELECT id FROM intelligence WHERE title=?', [item.title]);
         if (existing) continue;
 
-        const isGovSource = AUTHORITATIVE_SOURCES.some(s =>
-          (item.source_url || '').includes(s) || (item.summary || '').includes(s)
-        );
+        const severity = determineSeverity(item);
         const subCat = classifySubCategory(item.title, item.summary || '');
 
         const id = uuidv4();
@@ -248,7 +394,7 @@ async function collectPolicy() {
           [
             id, item.title, item.summary || '', item.source_url,
             source.name, 'policy', subCat,
-            isGovSource ? 'high' : 'info',
+            severity,
             item.publish_date, today, '电子签章政策法规', 0, 0,
             beijingISO(), beijingISO()
           ]
