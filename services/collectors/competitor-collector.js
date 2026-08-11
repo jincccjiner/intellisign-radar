@@ -37,7 +37,7 @@ const COMPETITOR_SOURCES = [
   {
     name: '腾讯电子签',
     sources: [
-      { url: 'https://cloud.tencent.com/developer/article?filter=ess', parser: parseTencentCloud },
+      { url: 'https://qian.tencent.com/document/version/', parser: parseTencentESSVersion },
     ],
   },
 ];
@@ -219,59 +219,52 @@ function parseQiyuesuoDetail(html) {
 }
 
 /**
- * 解析腾讯云开发者社区电子签相关文章
+ * 解析腾讯电子签产品更新动态页 (Docusaurus SSR)
+ * 结构：.version-carte > div (每个日期一个div)
+ *   内含 .version-title (日期) + .version-carte-content (更新内容)
+ *   内容内：.anchor-element > h5 (分类) + .tse-markdown-ul > .tse-ul-content (条目)
  */
-function parseTencentCloud(html) {
+function parseTencentESSVersion(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // 腾讯云社区文章卡片
-  '.cd-article-list .cd-article-item, .article-item, .c-acticle-item'.split(', ').forEach(sel => {
-    $(sel).each((i, el) => {
-      if (i >= 15) return false;
-      try {
-        const $el = $(el);
-        const title = $el.find('.cd-article-title, .title, h3, a').first().text().trim();
-        if (!title || title.length < 5 || title.length > 200) return;
+  $('.version-carte > div').each((i, div) => {
+    const $div = $(div);
+    const dateText = $div.find('.version-title').first().text().trim();
+    const dateMatch = dateText.match(/(20\d{2}\/\d{1,2}\/\d{1,2})/);
+    if (!dateMatch) return;
+    const publishDate = dateMatch[1].replace(/\//g, '-');
 
-        const href = $el.find('a').first().attr('href') || '';
-        let url = href;
-        if (url.startsWith('/')) url = 'https://cloud.tencent.com' + url;
+    const content = $div.find('.version-carte-content');
+    if (!content.length) return;
 
-        const text = $el.text();
-        const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
-        const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+    const editable = content.find('.tea-editable, .tse-editable').first();
+    if (!editable.length) return;
 
-        const summary = $el.find('.cd-article-desc, .desc, p').first().text().trim();
+    let currentCategory = '';
 
-        results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
-      } catch (e) { /* skip */ }
+    editable.children().each((j, child) => {
+      const $child = $(child);
+
+      if ($child.hasClass('anchor-element') || $child.find('h5').length) {
+        currentCategory = $child.find('h5').first().text().trim();
+      } else if ($child.hasClass('tse-markdown-ul')) {
+        const text = $child.find('.tse-ul-content').text().trim();
+        if (text && text.length > 3) {
+          const title = currentCategory ? `${currentCategory}：${text.slice(0, 80)}` : text.slice(0, 120);
+          results.push({
+            title: title.slice(0, 200),
+            summary: text.slice(0, 300),
+            source_url: 'https://qian.tencent.com/document/version/',
+            publish_date: publishDate,
+          });
+        }
+      }
     });
   });
 
-  // 兜底：抓取所有文章链接
-  if (results.length === 0) {
-    $('a[href*="/developer/article/"]').each((i, el) => {
-      if (i >= 15) return false;
-      try {
-        const $el = $(el);
-        const title = $el.text().trim();
-        if (!title || title.length < 5 || title.length > 200) return;
-
-        const href = $el.attr('href') || '';
-        let url = href;
-        if (url.startsWith('/')) url = 'https://cloud.tencent.com' + url;
-
-        const $parent = $el.closest('div, li');
-        const dateMatch = $parent.text().match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
-        const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
-
-        results.push({ title: title.slice(0, 200), summary: '', source_url: url, publish_date: publishDate });
-      } catch (e) { /* skip */ }
-    });
-  }
-
-  return dedupe(results);
+  // 只保留最近 30 条
+  return dedupe(results).slice(0, 30);
 }
 
 function dedupe(results) {
