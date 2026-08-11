@@ -5,6 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>生态伙伴 - IntelliSign Radar</title>
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .partner-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .partner-card { background: #fff; border-radius: 10px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); text-align: center; cursor: pointer; transition: transform .15s; }
+    .partner-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .partner-card-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .partner-card-cnt { font-size: 24px; font-weight: 700; color: #7b61ff; }
+    .item-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; transition: box-shadow .15s; }
+    .item-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .item-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .item-title { font-size: 14px; font-weight: 600; line-height: 1.4; flex: 1; }
+    .item-meta { font-size: 12px; color: #5f6368; display: flex; gap: 10px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+    .item-summary { font-size: 13px; color: #424242; line-height: 1.6; margin-top: 6px; }
+    .item-actions { display: flex; gap: 6px; margin-left: 8px; flex-shrink: 0; }
+    .icon-btn { background: none; border: none; cursor: pointer; padding: 4px; font-size: 16px; opacity: 0.5; transition: opacity .15s; }
+    .icon-btn:hover { opacity: 1; }
+    .icon-btn.starred { opacity: 1; color: #f9ab00; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .tag-cat { background: #f1f3f4; color: #5f6368; }
+    .tag-source { background: #e6f4ea; color: #137333; }
+    .tag-sev-high { background: #fce8e6; color: #ea4335; }
+    .tag-sev-medium { background: #fef7e0; color: #e37400; }
+  </style>
 </head>
 <body>
   <aside class="sidebar">
@@ -18,25 +40,32 @@
       <a href="/collect-logs" class="nav-item">采集日志</a>
       <a href="/settings" class="nav-item">系统设置</a>
     </nav>
-    <div class="sidebar-footer"><small>IntelliSign Radar v1.0</small></div>
+    <div class="sidebar-footer"><small>IntelliSign Radar v2.1</small></div>
   </aside>
   <main class="main-content">
     <header class="page-header">
       <h1>生态伙伴动态</h1>
       <div class="header-actions">
         <button class="btn btn-primary" onclick="triggerCollect('partner')">采集伙伴动态</button>
+        <button class="btn btn-outline" onclick="exportPartnerCSV()">导出CSV</button>
       </div>
     </header>
+
+    <!-- 伙伴速览卡片 -->
+    <div class="partner-cards" id="partnerCards"></div>
+
     <div class="filter-bar">
-      <select id="filterPartner" onchange="loadPartner()">
+      <select id="filterPartner" onchange="loadPartnerV2()">
         <option value="">全部伙伴</option>
+        <option value="安证通">安证通</option>
         <option value="法大大生态">法大大生态</option>
-        <option value="e签宝生态">e签宝生态</option>
         <option value="天威诚信">天威诚信</option>
         <option value="蓝凌">蓝凌</option>
-        <option value="安证通">安证通</option>
+        <option value="立约笔">立约笔</option>
       </select>
-      <select id="sortBy" onchange="loadPartner()">
+      <input type="text" id="filterKeyword" placeholder="搜索标题/摘要..." onkeyup="if(event.key==='Enter')loadPartnerV2()" style="width:240px">
+      <button class="btn btn-sm" onclick="loadPartnerV2()">搜索</button>
+      <select id="sortBy" onchange="loadPartnerV2()">
         <option value="collect">按采集时间</option>
         <option value="publish">按发布时间</option>
       </select>
@@ -46,6 +75,111 @@
     </div>
   </main>
   <script src="/js/app.js"></script>
-  <script>loadPartner();</script>
+  <script>
+  let partnerStats = {};
+
+  async function loadPartnerCards() {
+    const data = await api('/stats');
+    if (!data || !data.partnerBreakdown) return;
+    partnerStats = {};
+    data.partnerBreakdown.forEach(c => partnerStats[c.partner_name] = c.cnt);
+
+    const el = document.getElementById('partnerCards');
+    const allPartners = ['安证通', '法大大生态', '天威诚信', '蓝凌', '立约笔'];
+    el.innerHTML = allPartners.map(name => {
+      const cnt = partnerStats[name] || 0;
+      return `<div class="partner-card" onclick="filterByPartner('${name}')">
+        <div class="partner-card-name">${escHtml(name)}</div>
+        <div class="partner-card-cnt">${cnt}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function filterByPartner(name) {
+    document.getElementById('filterPartner').value = name;
+    loadPartnerV2();
+  }
+
+  async function loadPartnerV2() {
+    const name = document.getElementById('filterPartner')?.value || '';
+    const keyword = document.getElementById('filterKeyword')?.value || '';
+    const sortBy = document.getElementById('sortBy')?.value || 'collect';
+    let url = `/partners?pageSize=100&sortBy=${sortBy}`;
+    if (name) url += `&name=${encodeURIComponent(name)}`;
+    const data = await api(url);
+    if (!data) return;
+
+    let items = data.data || [];
+
+    if (keyword) {
+      const kw = keyword.toLowerCase();
+      items = items.filter(i => (i.title||'').toLowerCase().includes(kw) || (i.summary||'').toLowerCase().includes(kw));
+    }
+
+    const el = document.getElementById('partnerList');
+    if (items.length > 0) {
+      el.innerHTML = items.map(i => `
+        <div class="item-card">
+          <div class="item-header">
+            <div class="item-title">
+              <span class="tag tag-source">${escHtml(i.partner_name)}</span>
+              <span class="tag tag-cat">${escHtml(i.category||'')}</span>
+              ${i.severity === 'high' ? '<span class="tag tag-sev-high">高</span>' : i.severity === 'medium' ? '<span class="tag tag-sev-medium">中</span>' : ''}
+              ${escHtml(i.title)}
+            </div>
+            <div class="item-actions">
+              <button class="icon-btn ${i.is_starred?'starred':''}" onclick="toggleStar('partner','${i.id}',this)" title="收藏">&#9733;</button>
+            </div>
+          </div>
+          <div class="item-meta">
+            <span>${formatDate(i.publish_date)}</span>
+          </div>
+          ${i.summary ? `<div class="item-summary">${escHtml(i.summary.slice(0,200))}${i.summary.length>200?'...':''}</div>` : ''}
+        </div>
+      `).join('');
+    } else {
+      el.innerHTML = '<p class="empty-text">暂无数据，请点击"采集伙伴动态"</p>';
+    }
+  }
+
+  function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  async function toggleStar(type, id, btn) {
+    const data = await api(`/partners/${id}`);
+    if (!data) return;
+    const newStar = data.is_starred ? 0 : 1;
+    await api(`/partners/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_starred: newStar })
+    });
+    btn.classList.toggle('starred');
+  }
+
+  function exportPartnerCSV() {
+    const name = document.getElementById('filterPartner')?.value || '';
+    let url = `/partners?pageSize=999&sortBy=publish`;
+    if (name) url += `&name=${encodeURIComponent(name)}`;
+    api(url).then(data => {
+      if (!data || !data.data) return;
+      const header = '伙伴名称,标题,摘要,发布日期,采集日期,分类\n';
+      const rows = data.data.map(i => 
+        `"${i.partner_name||''}","${(i.title||'').replace(/"/g,'""')}","${(i.summary||'').replace(/"/g,'""').slice(0,200)}","${i.publish_date||''}","${i.collect_date||''}","${i.category||''}"`
+      ).join('\n');
+      const blob = new Blob(['\ufeff' + header + rows], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `伙伴动态_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      showToast('CSV已导出', 'success');
+    });
+  }
+
+  loadPartnerCards();
+  loadPartnerV2();
+  </script>
 </body>
 </html>
