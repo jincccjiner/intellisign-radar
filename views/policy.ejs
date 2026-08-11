@@ -5,38 +5,67 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>政策法规 - IntelliSign Radar</title>
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .policy-summary-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+    .policy-summary-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); text-align: center; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+    .policy-summary-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .policy-summary-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .policy-summary-cnt { font-size: 28px; font-weight: 700; }
+    .policy-summary-date { font-size: 11px; color: #5f6368; margin-top: 4px; }
+    .item-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; transition: box-shadow .15s; }
+    .item-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .item-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .item-title { font-size: 14px; font-weight: 600; line-height: 1.4; flex: 1; }
+    .item-meta { font-size: 12px; color: #5f6368; display: flex; gap: 10px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+    .item-summary { font-size: 13px; color: #424242; line-height: 1.6; margin-top: 6px; }
+    .item-actions { display: flex; gap: 6px; margin-left: 8px; flex-shrink: 0; }
+    .icon-btn { background: none; border: none; cursor: pointer; padding: 4px; font-size: 16px; opacity: 0.5; transition: opacity .15s; }
+    .icon-btn:hover { opacity: 1; }
+    .icon-btn.starred { opacity: 1; color: #f9ab00; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .tag-high { background: #fce8e6; color: #ea4335; }
+    .tag-medium { background: #fef7e0; color: #e37400; }
+    .tag-info { background: #e8f0fe; color: #1a73e8; }
+    .tag-cat { background: #f1f3f4; color: #5f6368; }
+    .tag-source { background: #e6f4ea; color: #137333; }
+  </style>
 </head>
 <body>
   <aside class="sidebar">
     <div class="sidebar-brand"><div class="brand-text">IntelliSign<small>Radar</small></div></div>
     <nav class="sidebar-nav">
       <a href="/" class="nav-item">总览仪表盘</a>
-      <a href="/policy" class="nav-item active">政策法规</a>
+      <a href="/policy" class="nav-item active">政策法规<span class="nav-badge" id="navPolicyBadge" style="display:none"></span></a>
       <a href="/competitor" class="nav-item">竞品动态</a>
       <a href="/partner" class="nav-item">生态伙伴</a>
       <a href="/briefs" class="nav-item">情报简报</a>
       <a href="/collect-logs" class="nav-item">采集日志</a>
       <a href="/settings" class="nav-item">系统设置</a>
     </nav>
-    <div class="sidebar-footer"><small>IntelliSign Radar v1.0</small></div>
+    <div class="sidebar-footer"><small>IntelliSign Radar v2.1</small></div>
   </aside>
   <main class="main-content">
     <header class="page-header">
       <h1>政策法规监控</h1>
       <div class="header-actions">
         <button class="btn btn-primary" onclick="triggerCollect('policy')">采集政策法规</button>
+        <button class="btn btn-outline" onclick="exportPolicyCSV()">导出CSV</button>
       </div>
     </header>
+
+    <!-- 信号速览卡片 -->
+    <div class="policy-summary-cards" id="policySummaryCards"></div>
+
     <div class="filter-bar">
-      <select id="filterSeverity" onchange="loadPolicy()">
-        <option value="">全部级别</option>
-        <option value="high">高危</option>
-        <option value="medium">中等</option>
-        <option value="info">一般</option>
+      <select id="filterSeverity" onchange="loadPolicyV2()">
+        <option value="">全部信号</option>
+        <option value="high">高信号</option>
+        <option value="medium">中信号</option>
+        <option value="info">低信号</option>
       </select>
-      <input type="text" id="filterKeyword" placeholder="搜索关键词..." onkeyup="if(event.key==='Enter')loadPolicy()">
-      <button class="btn btn-sm" onclick="loadPolicy()">搜索</button>
-      <select id="sortBy" onchange="loadPolicy()">
+      <input type="text" id="filterKeyword" placeholder="搜索标题/摘要..." onkeyup="if(event.key==='Enter')loadPolicyV2()" style="width:240px">
+      <button class="btn btn-sm" onclick="loadPolicyV2()">搜索</button>
+      <select id="sortBy" onchange="loadPolicyV2()">
         <option value="collect">按采集时间</option>
         <option value="publish">按发布时间</option>
       </select>
@@ -44,9 +73,116 @@
     <div class="card">
       <div class="card-body" id="policyList"><p class="empty-text">加载中...</p></div>
     </div>
-    <div class="pagination" id="policyPagination"></div>
   </main>
   <script src="/js/app.js"></script>
-  <script>loadPolicy();</script>
+  <script>
+  async function loadPolicySummary() {
+    const data = await api('/stats');
+    if (!data || !data.signalDist) return;
+    const dist = data.signalDist;
+    const items = [
+      { name: '高危信号', cnt: dist.high || 0, color: '#ea4335', bg: '#fce8e6', filter: 'high' },
+      { name: '中等信号', cnt: dist.medium || 0, color: '#f9ab00', bg: '#fef7e0', filter: 'medium' },
+      { name: '一般信号', cnt: dist.info || 0, color: '#1a73e8', bg: '#e8f0fe', filter: 'info' },
+    ];
+    document.getElementById('policySummaryCards').innerHTML = items.map(it => `
+      <div class="policy-summary-card" onclick="filterBySeverity('${it.filter}')" style="border-top:3px solid ${it.color}">
+        <div class="policy-summary-name" style="color:${it.color}">${it.name}</div>
+        <div class="policy-summary-cnt" style="color:${it.color}">${it.cnt}</div>
+      </div>
+    `).join('');
+    // 侧边栏预警角标
+    if (dist.high > 0) {
+      const b = document.getElementById('navPolicyBadge');
+      b.textContent = dist.high;
+      b.style.display = 'inline-block';
+    }
+  }
+
+  function filterBySeverity(sev) {
+    document.getElementById('filterSeverity').value = sev;
+    loadPolicyV2();
+  }
+
+  async function loadPolicyV2() {
+    const severity = document.getElementById('filterSeverity')?.value || '';
+    const keyword = document.getElementById('filterKeyword')?.value || '';
+    const sortBy = document.getElementById('sortBy')?.value || 'collect';
+    let url = `/intelligence?page=1&pageSize=100&sortBy=${sortBy}`;
+    if (severity) url += `&severity=${severity}`;
+    if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+
+    const data = await api(url);
+    if (!data) return;
+
+    let items = data.data || [];
+
+    const el = document.getElementById('policyList');
+    if (items.length > 0) {
+      el.innerHTML = items.map(i => {
+        const sevClass = i.severity === 'high' ? 'tag-high' : i.severity === 'medium' ? 'tag-medium' : 'tag-info';
+        const sevLabel = i.severity === 'high' ? '高' : i.severity === 'medium' ? '中' : '观察';
+        const catMap = { policy: '政策法规', regulation: '监管', certification: '认证', finance: '融资', other: '其他' };
+        const catLabel = catMap[i.category] || i.category || '政策法规';
+        return `<div class="item-card">
+          <div class="item-header">
+            <div class="item-title">
+              <span class="tag ${sevClass}">${sevLabel}</span>
+              <span class="tag tag-cat">${escHtml(catLabel)}</span>
+              ${i.source_name ? `<span class="tag tag-source">${escHtml(i.source_name)}</span>` : ''}
+              ${escHtml(i.title)}
+            </div>
+            <div class="item-actions">
+              <button class="icon-btn ${i.is_starred?'starred':''}" onclick="toggleStar('${i.id}',this)" title="收藏">&#9733;</button>
+            </div>
+          </div>
+          <div class="item-meta">
+            <span>${formatDate(i.publish_date)}</span>
+            <span>${i.collect_date ? '采集于 ' + i.collect_date : ''}</span>
+          </div>
+          ${i.summary ? `<div class="item-summary">${escHtml(i.summary.slice(0,200))}${i.summary.length>200?'...':''}</div>` : ''}
+        </div>`;
+      }).join('');
+    } else {
+      el.innerHTML = '<p class="empty-text">暂无数据，请点击"采集政策法规"</p>';
+    }
+  }
+
+  function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  async function toggleStar(id, btn) {
+    const data = await api(`/intelligence/${id}`);
+    if (!data) return;
+    const newStar = data.is_starred ? 0 : 1;
+    await api(`/intelligence/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_starred: newStar })
+    });
+    btn.classList.toggle('starred');
+  }
+
+  function exportPolicyCSV() {
+    api('/intelligence?pageSize=999&sortBy=publish').then(data => {
+      if (!data || !data.data) return;
+      const header = '标题,摘要,发布日期,采集日期,来源,分类,信号级别\n';
+      const rows = data.data.map(i => 
+        `"${(i.title||'').replace(/"/g,'""')}","${(i.summary||'').replace(/"/g,'""').slice(0,200)}","${i.publish_date||''}","${i.collect_date||''}","${i.source_name||''}","${i.category||''}","${i.severity||''}"`
+      ).join('\n');
+      const blob = new Blob(['\ufeff' + header + rows], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `政策法规_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      showToast('CSV已导出', 'success');
+    });
+  }
+
+  loadPolicySummary();
+  loadPolicyV2();
+  </script>
 </body>
 </html>
