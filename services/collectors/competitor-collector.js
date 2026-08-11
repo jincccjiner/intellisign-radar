@@ -1,5 +1,5 @@
 /**
- * 竞品动态采集器 v7
+ * 竞品动态采集器 v8
  * 监控：E签宝、法大大、契约锁、腾讯电子签 的产品更新、融资、合作等动态
  * 数据源：
  *  1. 各竞品官网新闻/动态页面（SSR可爬取）
@@ -7,9 +7,9 @@
  *  3. 契约锁新增 blogNews/blogLog/blogTrade 分类
  *  4. 腾讯电子签产品更新动态页
  * 含日期过滤（只保留最近12个月）+ 智能信号级别判定
- * v7 修复：
- *  - 增强相似标题去重（标点符号归一化）
- *  - 信号级别判定放宽（腾讯产品更新标记为medium）
+ * v8 修复：
+ *  - 数据库写入 source_name 字段（官网/搜狗微信来源溯源）
+ *  - 竞品表和伙伴表新增 source_name 字段
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -478,7 +478,7 @@ async function fetchPageWithRetry(url, maxRetries = 3) {
 }
 
 async function collectCompetitor() {
-  logger.info('开始采集竞品动态（v7 官网+公众号+去重增强+信号调优）...');
+  logger.info('开始采集竞品动态（v8 官网+公众号+来源溯源+去重增强+信号调优）...');
   let totalCount = 0;
   const today = beijingDate();
 
@@ -491,6 +491,14 @@ async function collectCompetitor() {
         const items = src.parser(html);
         logger.info(`[${competitor.name}]解析到 ${items.length} 条新闻`);
 
+        // 判定来源标签
+        const sourceName = src.url.includes('sogou.com') ? '搜狗微信'
+          : src.url.includes('esign.cn') || src.url.includes('tsign.cn') ? '官网'
+          : src.url.includes('fadada.com') ? '官网'
+          : src.url.includes('qiyuesuo.com') ? '官网'
+          : src.url.includes('qian.tencent.com') ? '官网'
+          : '其他';
+
         for (const item of items) {
           // v7 增强去重：归一化标题后判断
           const normTitle = normalizeTitle(item.title);
@@ -502,10 +510,10 @@ async function collectCompetitor() {
           const cat = classifyCategory(item.title);
           const severity = determineCompetitorSeverity(item.title);
           db.run(
-            `INSERT INTO competitor_news (id,competitor_name,title,summary,source_url,publish_date,collect_date,category,severity,is_starred,notes,created_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+            `INSERT INTO competitor_news (id,competitor_name,title,summary,source_url,source_name,publish_date,collect_date,category,severity,is_starred,notes,created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [id, competitor.name, item.title, item.summary || '', item.source_url,
-              item.publish_date, today, cat, severity, 0, '', beijingISO()]
+              sourceName, item.publish_date, today, cat, severity, 0, '', beijingISO()]
           );
           totalCount++;
         }
