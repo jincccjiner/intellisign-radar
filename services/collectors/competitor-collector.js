@@ -1,7 +1,12 @@
 /**
- * 竞品动态采集器 v5
+ * 竞品动态采集器 v6
  * 监控：E签宝、法大大、契约锁、腾讯电子签 的产品更新、融资、合作等动态
- * 数据源：直接爬取各竞品官网新闻/动态页面 + 搜狗搜索补充
+ * 数据源：
+ *  1. 各竞品官网新闻/动态页面（SSR可爬取）
+ *  2. 搜狗微信搜索（每个竞品多关键词，覆盖公众号文章）
+ *  3. 契约锁新增 blogNews/blogLog/blogTrade 分类
+ *  4. 腾讯电子签产品更新动态页
+ * 含日期过滤（只保留最近12个月）+ 智能信号级别判定
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -12,52 +17,71 @@ const { beijingISO, beijingDate } = require('../time-util');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
-// 各竞品官网新闻页配置
+// 搜狗微信搜索 URL 模板
+const sogouWeixinBase = 'https://weixin.sogou.com/weixin?type=2&query=';
+const sogouWeixinSuffix = '&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time';
+
+// ====== 各竞品数据源配置 ======
 const COMPETITOR_SOURCES = [
   {
     name: 'E签宝',
     sources: [
+      // 官网
       { url: 'https://www.esign.cn/news', parser: parseESignNews, retries: 3 },
       { url: 'https://www.esign.cn/blog', parser: parseESignBlog, retries: 3 },
-      { url: 'https://tsign.cn/', parser: parseTsignHome, retries: 2 },  // 备用源
+      { url: 'https://tsign.cn/', parser: parseTsignHome, retries: 2 },
+      // v6 新增：搜狗微信搜索
+      { url: sogouWeixinBase + encodeURIComponent('E签宝 合作 发布') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('E签宝 融资 中标') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('E签宝 AI 信创') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
     ],
   },
   {
     name: '法大大',
     sources: [
-      { url: 'https://www.fadada.com/company-news', parser: parseFaDaDaNews },
+      // 官网
+      { url: 'https://www.fadada.com/company-news', parser: parseFaDaDaNews, retries: 2 },
+      // v6 新增：搜狗微信搜索
+      { url: sogouWeixinBase + encodeURIComponent('法大大 合作 发布') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('法大大 融资 中标') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('法大大 AI 电子合同') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
     ],
   },
   {
     name: '契约锁',
     sources: [
-      { url: 'https://www.qiyuesuo.com/en-US/us/detail/blogCompany', parser: parseQiyuesuoDetail },
-      { url: 'https://www.qiyuesuo.com/en-US/us/detail/blogIndustry', parser: parseQiyuesuoDetail },
+      // 官网
+      { url: 'https://www.qiyuesuo.com/en-US/us/detail/blogCompany', parser: parseQiyuesuoDetail, retries: 2 },
+      { url: 'https://www.qiyuesuo.com/en-US/us/detail/blogIndustry', parser: parseQiyuesuoDetail, retries: 2 },
+      // v6 新增：3个博客分类
+      { url: 'https://www.qiyuesuo.com/en-US/us/detail/blogNews', parser: parseQiyuesuoDetail, retries: 2 },
+      { url: 'https://www.qiyuesuo.com/en-US/us/detail/blogLog', parser: parseQiyuesuoDetail, retries: 2 },
+      { url: 'https://www.qiyuesuo.com/en-US/us/detail/blogTrade', parser: parseQiyuesuoDetail, retries: 2 },
+      // v6 新增：搜狗微信搜索
+      { url: sogouWeixinBase + encodeURIComponent('契约锁 合作 发布') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('契约锁 电子签章') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
     ],
   },
   {
     name: '腾讯电子签',
     sources: [
-      // 搜狗微信搜索 - 多关键词（各搜一页，sort=time 按时间排序）
-      { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E5%90%88%E4%BD%9C&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
-      { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E5%8F%91%E5%B8%83&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
-      { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+AI&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
-      { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E4%B8%AD%E6%A0%87&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
-      { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E7%94%B5%E5%AD%90%E5%8D%B0%E7%AB%A0&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
-      { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E8%9E%8D%E8%B5%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
-      // 搜狗资讯搜索（覆盖面更广，从海外可能返回0但不报错）
+      // 搜狗微信搜索 - 多关键词
+      { url: sogouWeixinBase + encodeURIComponent('腾讯电子签 合作') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('腾讯电子签 发布') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('腾讯电子签 AI') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('腾讯电子签 中标') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('腾讯电子签 电子印章') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('腾讯电子签 融资') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      // 搜狗资讯搜索
       { url: 'https://www.sogou.com/web?query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E5%90%88%E4%BD%9C+%E5%8F%91%E5%B8%83&ie=utf8&sort=1', parser: parseSogouWeb, retries: 2 },
-      // 腾讯电子签产品更新动态页（功能更新，补充性质）
-      { url: 'https://qian.tencent.com/document/version/', parser: parseTencentESSVersion },
+      // 腾讯电子签产品更新动态页
+      { url: 'https://qian.tencent.com/document/version/', parser: parseTencentESSVersion, retries: 2 },
     ],
   },
 ];
 
-// ====== 日期过滤与去重工具函数 ======
+// ====== 工具函数 ======
 
-/**
- * 日期过滤：只保留最近 N 个月的文章
- */
 function filterRecentResults(results, months = 12) {
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - months);
@@ -76,6 +100,12 @@ function dedupe(results) {
     seen.add(r.title);
     return true;
   });
+}
+
+function determineCompetitorSeverity(title) {
+  if (/融资|投资|IPO|上市|中标|签约/.test(title)) return 'high';
+  if (/合作|战略|生态|新功能|发布|升级|荣获|入选/.test(title)) return 'medium';
+  return 'info';
 }
 
 // ====== 解析函数 ======
@@ -107,7 +137,6 @@ function parseESignNews(html) {
     } catch (e) { /* skip */ }
   });
 
-  // 兜底：如果没有 .article-card 选择器命中，尝试通用解析
   if (results.length === 0) {
     $('h3, h2').each((i, el) => {
       if (i >= 20) return false;
@@ -129,9 +158,6 @@ function parseESignNews(html) {
   return dedupe(results);
 }
 
-/**
- * 解析 E签宝 /blog 页面（行业资讯）
- */
 function parseESignBlog(html) {
   const $ = cheerio.load(html);
   const results = [];
@@ -159,9 +185,6 @@ function parseESignBlog(html) {
   return dedupe(results);
 }
 
-/**
- * 解析 tsign.cn 首页（E签宝备用数据源）
- */
 function parseTsignHome(html) {
   const $ = cheerio.load(html);
   const results = [];
@@ -222,37 +245,35 @@ function parseFaDaDaNews(html) {
 }
 
 /**
- * 解析契约锁新闻列表详情页 (blogCompany / blogIndustry)
+ * 解析契约锁新闻列表详情页（统一解析 blogCompany/blogIndustry/blogNews/blogLog/blogTrade）
  */
 function parseQiyuesuoDetail(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  $('.blog-item, .news-item, .list-item, .col').each((i, el) => {
+  $('ul.blog-list > li').each((i, li) => {
     if (i >= 15) return false;
     try {
-      const $el = $(el);
-      const title = $el.find('a, p, h3, h2, .title').first().text().trim().replace(/\s+/g, ' ');
+      const $li = $(li);
+      const title = $li.find('.title, .content .title, h3, h2').first().text().trim().replace(/\s+/g, ' ');
       if (!title || title.length < 8 || title.length > 200) return;
 
-      const href = $el.find('a').attr('href') || '';
+      const href = $li.find('a').attr('href') || '';
       let url = href;
       if (url.startsWith('/')) url = 'https://www.qiyuesuo.com' + url;
 
-      const text = $el.text();
-      const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2}[\s\d:]*)/);
-      const publishDate = dateMatch ? dateMatch[1].slice(0, 10).replace(/\//g, '-') : null;
+      // 日期：.right-text 格式 "2026-08-07 09:39:54"
+      const dateText = $li.find('.right-text, .content-bottom .right-text').first().text().trim();
+      const dateMatch = dateText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
 
-      const snippet = $el.find('.tip, .desc, .summary, p').toArray()
-        .map(e => $(e).text().trim())
-        .filter(t => t.length > 10 && t !== title)
-        .slice(0, 1)[0] || '';
+      const summary = $li.find('.text, .content .text, p, .desc').first().text().trim();
 
-      results.push({ title: title.slice(0, 200), summary: snippet.slice(0, 300), source_url: url, publish_date: publishDate });
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
     } catch (e) { /* skip */ }
   });
 
-  // 兜底：抓取所有包含 /blog/ 的链接
+  // 兜底：通用解析
   if (results.length === 0) {
     $('a[href*="/blog/"]').each((i, el) => {
       if (i >= 15) return false;
@@ -271,7 +292,6 @@ function parseQiyuesuoDetail(html) {
         const publishDate = dateMatch ? dateMatch[1].slice(0, 10).replace(/\//g, '-') : null;
 
         const snippet = text.replace(title, '').trim().slice(0, 300);
-
         results.push({ title: title.slice(0, 200), summary: snippet, source_url: url, publish_date: publishDate });
       } catch (e) { /* skip */ }
     });
@@ -281,7 +301,7 @@ function parseQiyuesuoDetail(html) {
 }
 
 /**
- * 解析腾讯电子签产品更新动态页 (Docusaurus SSR)
+ * 解析腾讯电子签产品更新动态页
  */
 function parseTencentESSVersion(html) {
   const $ = cheerio.load(html);
@@ -304,7 +324,6 @@ function parseTencentESSVersion(html) {
 
     editable.children().each((j, child) => {
       const $child = $(child);
-
       if ($child.hasClass('anchor-element') || $child.find('h5').length) {
         currentCategory = $child.find('h5').first().text().trim();
       } else if ($child.hasClass('tse-markdown-ul')) {
@@ -322,20 +341,16 @@ function parseTencentESSVersion(html) {
     });
   });
 
-  // 只保留最近 10 条功能更新
-  return dedupe(results).slice(0, 10);
+  return dedupe(results).slice(0, 15);
 }
 
 /**
- * 解析搜狗微信搜索结果（腾讯电子签相关公众号文章）
- * 时间格式：document.write(timeConvert('timestamp'))
- * v5: 增加日期过滤，只保留最近12个月
+ * 解析搜狗微信搜索结果（各竞品公众号文章）
  */
 function parseSogouWeixin(html) {
   const $ = cheerio.load(html);
   const results = [];
-
-  const blacklist = /借钱|骗局|贷款|套现|到账|实际到账|怎么借|套路/;
+  const blacklist = /借钱|骗局|贷款|套现|到账|实际到账|怎么借|套路|招聘|考研/;
 
   $('ul.news-list > li').each((i, li) => {
     if (i >= 15) return false;
@@ -349,7 +364,6 @@ function parseSogouWeixin(html) {
       let url = titleEl.attr('href') || '';
       if (url.startsWith('/')) url = 'https://weixin.sogou.com' + url;
 
-      // 时间戳提取: document.write(timeConvert('1697016013'))
       const timeMatch = $li.html().match(/timeConvert\('(\d+)'\)/);
       let publishDate = null;
       if (timeMatch) {
@@ -359,26 +373,21 @@ function parseSogouWeixin(html) {
       }
 
       const summary = $li.find('.txt-box p').text().trim();
-
       results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
     } catch (e) { /* skip */ }
   });
 
-  // 过滤最近12个月的文章（过滤旧文和使用指南）
   const recent = filterRecentResults(dedupe(results), 12);
-  logger.info(`搜狗微信搜索过滤：${results.length}条 → 最近12个月${recent.length}条`);
+  logger.info(`搜狗微信竞品搜索过滤：${results.length}条 → 最近12个月${recent.length}条`);
   return recent;
 }
 
 /**
- * 解析搜狗资讯搜索结果（www.sogou.com/web）
- * 结构：.results .vrwrap，每条含 h3 a (标题+链接)、.str_info (摘要)、.f (日期+来源)
- * 参数 sort=1 表示按时间排序
+ * 解析搜狗资讯搜索结果
  */
 function parseSogouWeb(html) {
   const $ = cheerio.load(html);
   const results = [];
-
   const blacklist = /借钱|骗局|贷款|套现|到账|实际到账|怎么借|套路/;
 
   $('.results .vrwrap, .results .rb').each((i, el) => {
@@ -389,21 +398,16 @@ function parseSogouWeb(html) {
       const title = titleEl.text().trim().replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
       if (!title || title.length < 8 || title.length > 200) return;
       if (blacklist.test(title)) return;
-      // 只保留标题包含"腾讯"或"电子签"的结果
       if (!/腾讯|电子签/.test(title)) return;
 
       let url = titleEl.attr('href') || '';
       if (url.startsWith('/')) url = 'https://www.sogou.com' + url;
 
-      // 摘要
       const summary = $el.find('.str_info, .str-text-info, p').first().text().trim();
-
-      // 日期提取：多种格式
       const text = $el.text();
       const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
       let publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
 
-      // 尝试从 .f 元素提取日期
       if (!publishDate) {
         const fText = $el.find('.f, .fb, .news-from').text();
         const fDateMatch = fText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
@@ -414,7 +418,6 @@ function parseSogouWeb(html) {
     } catch (e) { /* skip */ }
   });
 
-  // 过滤最近12个月
   const recent = filterRecentResults(dedupe(results), 12);
   logger.info(`搜狗资讯搜索过滤：${results.length}条 → 最近12个月${recent.length}条`);
   return recent;
@@ -436,45 +439,32 @@ async function fetchPage(url, timeout = 20000) {
     'Accept': 'text/html,application/xhtml+xml',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
   };
-  // 搜狗搜索需要 Referer 头
   if (url.includes('sogou.com')) {
     headers['Referer'] = 'https://weixin.sogou.com/';
     headers['Accept'] = 'text/html';
   }
-  const resp = await axios.get(url, {
-    headers,
-    timeout,
-    maxRedirects: 5,
-  });
+  const resp = await axios.get(url, { headers, timeout, maxRedirects: 5 });
   return resp.data;
 }
 
-/**
- * 带重试机制的页面抓取
- */
 async function fetchPageWithRetry(url, maxRetries = 3) {
   let lastError;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const timeout = 20000 + (attempt - 1) * 10000; // 20s, 30s, 40s
+      const timeout = 20000 + (attempt - 1) * 10000;
       logger.info(`抓取 ${url} (第${attempt}次尝试, 超时${timeout / 1000}s)`);
-      const html = await fetchPage(url, timeout);
-      return html;
+      return await fetchPage(url, timeout);
     } catch (err) {
       lastError = err;
       logger.warn(`抓取 ${url} 第${attempt}次失败: ${err.message}`);
-      if (attempt < maxRetries) {
-        const wait = 2000 * attempt;
-        logger.info(`等待 ${wait / 1000}s 后重试...`);
-        await new Promise(r => setTimeout(r, wait));
-      }
+      if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000 * attempt));
     }
   }
   throw lastError;
 }
 
 async function collectCompetitor() {
-  logger.info('开始采集竞品动态（v5 多关键词+日期过滤）...');
+  logger.info('开始采集竞品动态（v6 官网+公众号+博客分类+智能信号）...');
   let totalCount = 0;
   const today = beijingDate();
 
@@ -493,18 +483,19 @@ async function collectCompetitor() {
 
           const id = uuidv4();
           const cat = classifyCategory(item.title);
+          const severity = determineCompetitorSeverity(item.title);
           db.run(
             `INSERT INTO competitor_news (id,competitor_name,title,summary,source_url,publish_date,collect_date,category,severity,is_starred,notes,created_at)
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
             [id, competitor.name, item.title, item.summary || '', item.source_url,
-              item.publish_date, today, cat, 'info', 0, '', beijingISO()]
+              item.publish_date, today, cat, severity, 0, '', beijingISO()]
           );
           totalCount++;
         }
 
         await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
       } catch (err) {
-        logger.error(`采集竞品[${competitor.name}] ${src.url} 异常（重试耗尽）: ${err.message}`);
+        logger.error(`采集竞品[${competitor.name}] ${src.url} 异常: ${err.message}`);
       }
     }
   }
