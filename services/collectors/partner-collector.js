@@ -1,18 +1,17 @@
 /**
- * 生态伙伴动态采集器 v6
+ * 生态伙伴动态采集器 v7
  * 监控：立约笔、蓝凌、天威诚信、法大大生态、e签宝生态 等生态伙伴
  * 数据源：
  *  1. 各伙伴官网新闻/动态页面（SSR可爬取）
  *  2. 搜狗微信搜索（每个伙伴多关键词，覆盖公众号文章）
- *  3. 蓝凌 __NUXT__ 数据提取优化
+ *  3. 蓝凌新增签约验收/行业动态/媒体报道三个分类页面+搜狗微信关键词增强
  *  4. 立约笔搜狗微信搜索（官网无新闻页，通过公众号获取）
- *  5. 蓝凌 __NUXT__ 数据提取优化
- *  6. e签宝生态改用搜狗微信搜索（官网合作页为SPA无数据）
+ *  5. e签宝生态改用搜狗微信搜索（官网合作页为SPA无数据）
  * 含日期过滤（只保留最近12个月）+ 智能信号级别判定（v5放宽）
- * v6 修复：
- *  - e签宝生态搜狗微信关键词从3个增至6个（+伙伴大会/数字化/政务）
- *  - 数据库写入 source_name 字段（官网/搜狗微信来源溯源）
- *  - 竞品表和伙伴表新增 source_name 字段
+ * v7 修复：
+ *  - 蓝凌采集器大幅优化：新增3个分类页面+3个搜狗微信关键词
+ *  - 蓝凌 NUXT 压缩变量格式适配（name字段+publishTime变量还原）
+ *  - 蓝凌 DOM 解析适配新页面结构
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -52,11 +51,17 @@ const PARTNER_SOURCES = [
   },
   {
     name: '蓝凌-官网',
-    sources: [{ url: 'https://www.landray.com.cn/activity', parser: parseLandrayNews, retries: 2, sourceName: '官网' }],
+    sources: [
+      { url: 'https://www.landray.com.cn/activity', parser: parseLandrayNews, retries: 2, sourceName: '官网' },
+      { url: 'https://www.landray.com.cn/activity?type=12007', parser: parseLandrayNews, retries: 2, sourceName: '官网-签约验收' },
+      { url: 'https://www.landray.com.cn/activity?type=21953', parser: parseLandrayNews, retries: 2, sourceName: '官网-行业动态' },
+      { url: 'https://www.landray.com.cn/activity?type=22080', parser: parseLandrayNews, retries: 2, sourceName: '官网-媒体报道' },
+    ],
     partnerName: '蓝凌',
     weixinSources: [
       { url: sogouWeixinBase + encodeURIComponent('蓝凌 OA 协同') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
       { url: sogouWeixinBase + encodeURIComponent('蓝凌 数字化 合作') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
+      { url: sogouWeixinBase + encodeURIComponent('蓝凌智能 签约') + sogouWeixinSuffix, parser: parseSogouWeixin, retries: 2 },
     ],
   },
   {
@@ -297,29 +302,70 @@ function parseItrusNews(html) {
 
 /**
  * 解析蓝凌活动/新闻页
- * v4 优化：优先从 __NUXT__ 数据提取，DOM 兜底
+ * v7 优化：
+ *  - NUXT 数据中使用 name 字段（非 title），publishTime 使用变量引用
+ *  - DOM 解析适配新结构：.new-about-company li 下的 h3 标题 + 日期文本
+ *  - 支持 a[href*="/activity/ID"] 链接提取
  */
 function parseLandrayNews(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // 尝试从 __NUXT__ 提取（含完整 newsList）
+  // 方案1：从 __NUXT__ newsList 提取 name 字段（蓝凌NUXT中标题字段叫name而非title）
   try {
-    const nuxtMatch = html.match(/newsList\s*:\s*(\[[\s\S]*?\])\s*[,}]/);
+    const nuxtMatch = html.match(/newsList:\[([\s\S]*?)\]\s*[,}]/);
     if (nuxtMatch) {
-      const rawItems = nuxtMatch[1].match(/\{[^}]+\}/g);
-      if (rawItems) {
-        for (const raw of rawItems) {
-          const titleMatch = raw.match(/title\s*:\s*["']([^"']+)["']/);
-          const dateMatch = raw.match(/publishTime\s*:\s*["']([^"']*)["']/);
-          const summaryMatch = raw.match(/summary\s*:\s*["']([^"']*)["']/);
-          if (titleMatch) {
-            const title = titleMatch[1].trim();
-            if (title.length < 8 || title.length > 200) continue;
-            const publishDate = dateMatch ? dateMatch[1].slice(0, 10) : null;
-            const summary = summaryMatch ? summaryMatch[1].slice(0, 300) : '';
-            results.push({ title, summary, source_url: 'https://www.landray.com.cn/activity', publish_date: publishDate });
+      const rawStr = nuxtMatch[1];
+      // 提取 name 字段（蓝凌NUXT中标题字段叫name）
+      const nameRegex = /name:"([^"]+)"/g;
+      const names = [];
+      let m;
+      while ((m = nameRegex.exec(rawStr)) !== null) {
+        names.push(m[1]);
+      }
+      
+      // 尝试提取 publishTime — 可能是变量引用或日期字符串
+      // 用更宽松的方式：提取 id 和 name 的配对，publishTime 从 DOM 或链接获取
+      if (names.length > 0) {
+        // 用正则提取 id 和 name 配对
+        const idNameRegex = /id:(\d+),[\s\S]*?name:"([^"]+)"/g;
+        let idMatch;
+        const idNameMap = {};
+        while ((idMatch = idNameRegex.exec(rawStr)) !== null) {
+          idNameMap[idMatch[1]] = idMatch[2];
+        }
+        
+        // 尝试从 NUXT 函数参数还原 publishTime 变量值
+        const funcMatch = html.match(/window\.__NUXT__=\(function\(([^)]*)\)\{return/);
+        const callMatch = html.match(/\}\)\(([^)]*)\)/);
+        let varValues = {};
+        if (funcMatch && callMatch) {
+          const params = funcMatch[1].split(',').map(s => s.trim());
+          const args = callMatch[1].split(',').map(s => s.trim());
+          for (let i = 0; i < params.length && i < args.length; i++) {
+            varValues[params[i]] = args[i].replace(/^["']|["']$/g, '');
           }
+        }
+        
+        // 用 publishTime 变量还原日期
+        const ptRegex = /publishTime:([A-Z_]\w*)/g;
+        const ptDataRegex = /id:(\d+),[\s\S]*?publishTime:([A-Z_]\w*)/g;
+        const idPtMap = {};
+        let ptMatch;
+        while ((ptMatch = ptDataRegex.exec(rawStr)) !== null) {
+          const dateStr = varValues[ptMatch[2]] || '';
+          idPtMap[ptMatch[1]] = dateStr.slice(0, 10);
+        }
+        
+        for (const [id, name] of Object.entries(idNameMap)) {
+          if (name.length < 8 || name.length > 200) continue;
+          const publishDate = idPtMap[id] || null;
+          results.push({
+            title: name,
+            summary: '',
+            source_url: `https://www.landray.com.cn/activity/${id}`,
+            publish_date: publishDate
+          });
         }
       }
     }
@@ -327,13 +373,15 @@ function parseLandrayNews(html) {
     logger.warn(`蓝凌 __NUXT__ 解析异常: ${e.message}`);
   }
 
-  // DOM 兜底
+  // 方案2：DOM 解析（从 SSR 渲染的 HTML 中提取）
   if (results.length === 0) {
-    $('.new-about-company ul li, .new-about-company li').each((i, el) => {
+    // 主要方式：从 .new-about-company li 中提取
+    $('.new-about-company li').each((i, el) => {
       if (i >= 20) return false;
       try {
         const $el = $(el);
-        const title = $el.find('.right-desc h1, .right-desc h3, h1, h3').first().text().trim();
+        // 蓝凌新页面：h3 包含标题，整个 li 的文本包含日期
+        const title = $el.find('h3').first().text().trim() || $el.find('h2, h1').first().text().trim();
         if (!title || title.length < 5 || title.length > 200) return;
 
         const href = $el.find('a').first().attr('href') || '';
@@ -341,14 +389,39 @@ function parseLandrayNews(html) {
         if (url.startsWith('/')) url = 'https://www.landray.com.cn' + url;
         if (!url.startsWith('http')) url = 'https://www.landray.com.cn/activity';
 
-        const dateText = $el.find('.date, .time, time').first().text().trim();
-        const dateMatch = dateText.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+        // 日期可能在文本中
+        const text = $el.text();
+        const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
         const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
 
-        const summary = $el.find('.article, .desc, .summary, p').first().text().trim();
+        const summary = $el.find('p, .desc, .summary').first().text().trim();
         results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
       } catch (e) { /* skip */ }
     });
+
+    // 兜底：从 a[href*="/activity/"] 链接中提取
+    if (results.length === 0) {
+      $('a[href*="/activity/"]').each((i, el) => {
+        if (i >= 20) return false;
+        try {
+          const $el = $(el);
+          const text = $el.text().trim().replace(/\s+/g, ' ');
+          // 提取标题（取第一个有意义的文本段）
+          const title = text.split(/\s{2,}/)[0].trim();
+          if (!title || title.length < 8 || title.length > 200) return;
+
+          let url = $el.attr('href') || '';
+          if (url.startsWith('/')) url = 'https://www.landray.com.cn' + url;
+          if (!url.startsWith('http')) url = 'https://www.landray.com.cn/activity';
+
+          const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+          const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+          const summary = text.replace(title, '').trim().slice(0, 300);
+
+          results.push({ title: title.slice(0, 200), summary, source_url: url, publish_date: publishDate });
+        } catch (e) { /* skip */ }
+      });
+    }
   }
 
   return dedupe(results);
