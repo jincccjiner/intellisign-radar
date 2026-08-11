@@ -42,7 +42,10 @@ const COMPETITOR_SOURCES = [
       { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E5%90%88%E4%BD%9C&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
       { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E5%8F%91%E5%B8%83&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
       { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+AI&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
-      // 搜狗资讯搜索（覆盖面更广）
+      { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E4%B8%AD%E6%A0%87&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+      { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E7%94%B5%E5%AD%90%E5%8D%B0%E7%AB%A0&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+      { url: 'https://weixin.sogou.com/weixin?type=2&query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E8%9E%8D%E8%B5%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+      // 搜狗资讯搜索（覆盖面更广，从海外可能返回0但不报错）
       { url: 'https://www.sogou.com/web?query=%E8%85%BE%E8%AE%AF%E7%94%B5%E5%AD%90%E7%AD%BE+%E5%90%88%E4%BD%9C+%E5%8F%91%E5%B8%83&ie=utf8&sort=1', parser: parseSogouWeb, retries: 2 },
       // 腾讯电子签产品更新动态页（功能更新，补充性质）
       { url: 'https://qian.tencent.com/document/version/', parser: parseTencentESSVersion },
