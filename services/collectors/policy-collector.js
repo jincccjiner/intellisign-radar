@@ -1,19 +1,25 @@
 /**
- * 政策法规采集器 v6
+ * 政策法规采集器 v7
  * 数据源：
- *  1. 搜狗微信搜索（13个关键词，覆盖电子签名全领域政策+信创+数据安全）
- *  2. 搜狗资讯搜索（2个关键词，覆盖更广互联网新闻源）
- *  3. 零壹财经搜索（金融科技政策视角，SSR可抓取）
+ *  1. 搜狗微信搜索（18个关键词，覆盖电子签名全领域政策+信创+数据安全+密码+身份认证）
+ *  2. 搜狗资讯搜索（4个关键词，覆盖更广互联网新闻源）
+ *  3. 零壹财经搜索（2个关键词，金融科技政策视角）
  *  4. 法大大政策法规专栏
  *  5. 契约锁行业资讯页（行业政策解读）
  *  6. 天威诚信新闻（CA/认证领域政策）
  *  7. 蓝凌行业动态（数字化办公/信创政策）
+ *  8. 安全内参-政策法规（网络安全/数据安全/密码政策，高质量SSR）【v7新增】
+ *  9. 沃通CA新闻（证书/国密/电子认证政策）【v7新增】
+ *  10. CFCA新闻动态（金融CA/电子签章政策）【v7新增】
+ *  11. 上海CA(SHECA)新闻（CA/电子签章政策）【v7新增】
  * 含日期过滤（只保留最近12个月）+ 智能信号级别判定
- * v6 修复：
- *  - 新增搜狗资讯搜索2个关键词
- *  - 新增零壹财经搜索2个关键词（金融科技政策视角）
- *  - 新增3个搜狗微信关键词（信创/数据安全/电子签章应用推广）
- *  - 修复蓝凌NUXT新格式解析（压缩变量+name字段）
+ * v7 升级：
+ *  - 新增安全内参政策法规频道（高质量网络安全/数据安全政策源）
+ *  - 新增沃通CA新闻（电子认证/国密/证书政策核心源）
+ *  - 新增CFCA新闻动态（金融CA/签章政策源）
+ *  - 新增上海CA新闻（CA/签章政策源）
+ *  - 新增5个搜狗微信关键词（商用密码实施+电子证照+网络身份认证+电子档案+互联网法院）
+ *  - 新增2个搜狗资讯关键词（商用密码+电子证照政策）
  */
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
@@ -62,9 +68,29 @@ const POLICY_SOURCES = [
 
   // 蓝凌行业动态（数字化办公/信创政策）
   { name: '蓝凌-行业动态', url: 'https://www.landray.com.cn/activity', parser: parseLandrayPolicy, retries: 2 },
-];
+  // v7 新增：更多维度的搜狗微信关键词
+  { name: '搜狗微信-商用密码实施', url: 'https://weixin.sogou.com/weixin?type=2&query=%E5%95%86%E7%94%A8%E5%AF%86%E7%A0%81+%E5%AE%9E%E6%96%BD+%E6%94%BF%E7%AD%96&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-电子证照政策', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E8%AF%81%E7%85%A7+%E6%94%BF%E7%AD%96+%E6%8E%A8%E5%B9%BF&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-网络身份认证', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%BD%91%E7%BB%9C%E8%BA%AB%E4%BB%BD%E8%AE%A4%E8%AF%81+%E6%94%BF%E7%AD%96+%E6%96%B0%E8%A7%84&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-电子档案法规', url: 'https://weixin.sogou.com/weixin?type=2&query=%E7%94%B5%E5%AD%90%E6%A1%A3%E6%A1%88+%E6%B3%95%E8%A7%84+%E6%A0%87%E5%87%86&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
+  { name: '搜狗微信-互联网法院电子证据', url: 'https://weixin.sogou.com/weixin?type=2&query=%E4%BA%92%E8%81%94%E7%BD%91%E6%B3%95%E9%99%A2+%E7%94%B5%E5%AD%90%E8%AF%81%E6%8D%AE+%E8%A7%84%E5%88%99&ie=utf8&s_from=input&_sug_=n&_sug_type=&w=01019900&htq=1&su=1&pn=0&sort=time', parser: parseSogouWeixin, retries: 2 },
 
-// 权威来源标识
+  // v7 新增：更多搜狗资讯搜索关键词
+  { name: '搜狗资讯-商用密码政策', url: 'https://www.sogou.com/web?query=%E5%95%86%E7%94%A8%E5%AF%86%E7%A0%81+%E6%94%BF%E7%AD%96+%E6%96%B0%E8%A7%84&ie=utf8&sort=1', parser: parseSogouWeb, retries: 2 },
+  { name: '搜狗资讯-电子证照推广', url: 'https://www.sogou.com/web?query=%E7%94%B5%E5%AD%90%E8%AF%81%E7%85%A7+%E6%8E%A8%E5%B9%BF+%E6%94%BF%E7%AD%96&ie=utf8&sort=1', parser: parseSogouWeb, retries: 2 },
+
+  // v7 新增：安全内参-政策法规频道（网络安全/数据安全/密码政策，高质量SSR）
+  { name: '安全内参-政策法规', url: 'https://www.secrss.com/articles?category=policy', parser: parseSecRssPolicy, retries: 2 },
+
+  // v7 新增：沃通CA新闻（证书/国密/电子认证政策）
+  { name: '沃通CA-新闻', url: 'https://www.wosign.com/news/wotrusnews', parser: parseWoSignPolicy, retries: 2 },
+
+  // v7 新增：CFCA新闻动态（金融CA/电子签章政策）
+  { name: 'CFCA-新闻动态', url: 'https://www.cfca.com.cn/cfca/listnews.html', parser: parseCFCA, retries: 2 },
+
+  // v7 新增：上海CA(SHECA)新闻（CA/电子签章政策）
+  { name: '上海CA-新闻', url: 'https://www.sheca.com/news', parser: parseSHECA, retries: 2 },
+];
 const AUTHORITATIVE_SOURCES = [
   'gov.cn', 'miit.gov.cn', 'cac.gov.cn', 'sca.gov.cn',
   'mof.gov.cn', 'ndrc.gov.cn', 'std.samr.gov.cn',
@@ -73,7 +99,8 @@ const AUTHORITATIVE_SOURCES = [
 ];
 
 // 高信号关键词（出现这些词则 severity=high）
-const HIGH_SIGNAL_KEYWORDS = /新规|施行|强制|禁止|处罚|整改|废止|修订|征求意见|国家标准|行业标准|国务院|人大常委会/;
+// v7 扩展：更多关键词匹配
+const HIGH_SIGNAL_KEYWORDS = /新规|施行|强制|禁止|处罚|整改|废止|修订|征求意见|国家标准|行业标准|国务院|人大常委会|监督检查办法|许可证|换证|有效期调整|根证书升级|资质延续/;
 
 // ====== v5 噪声过滤关键词 ======
 // 天威诚信等官网新闻中，这些词出现说明不是政策法规，而是活动/营销类
@@ -485,6 +512,256 @@ function parse01Caijing(html) {
   return recent;
 }
 
+// ====== v7 新增解析函数 ======
+
+/**
+ * v7 新增：解析安全内参-政策法规频道
+ * 安全内参(www.secrss.com)是高质量网络安全/数据安全/密码政策源
+ * HTML结构：.articles-list .article-item 或直接文章列表
+ */
+function parseSecRssPolicy(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  // 政策相关关键词过滤（安全内参内容广，需筛选与电子签章/CA/密码/数据安全相关的）
+  const policyRegex = /电子签名|电子签章|电子认证|CA|数字证书|商用密码|国密|密码法|数据安全|个人信息|电子合同|电子签|身份认证|网络安全法|数据跨境|电子证照|数字政府|可信|存证|签署|互联网法院|合规|监管|监督检查|新规|施行|征求意见|资质/;
+
+  $('a[href*="/articles/"]').each((i, el) => {
+    if (i >= 20) return false;
+    try {
+      const $el = $(el);
+      const title = $el.find('h2, h3, .article-title, .title').first().text().trim()
+        || $el.text().trim().replace(/\s+/g, ' ').split(/\s{2,}/)[0];
+      if (!title || title.length < 8 || title.length > 200) return;
+      // 过滤只保留政策相关的
+      if (!policyRegex.test(title + ' ' + ($el.closest('.article-item, .article, li').find('p, .summary, .desc').first().text().trim() || ''))) return;
+
+      let url = $el.attr('href') || '';
+      if (url.startsWith('/')) url = 'https://www.secrss.com' + url;
+
+      const text = $el.closest('.article-item, .article, li, div').text();
+      const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+      const summary = $el.closest('.article-item, .article, li, div').find('p, .summary, .desc').first().text().trim();
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  // 如果主选择器无结果，尝试更宽泛的选择
+  if (results.length === 0) {
+    $('.article-item, article, .post, .content-list a, .list-item a').each((i, el) => {
+      if (i >= 20) return false;
+      try {
+        const $el = $(el);
+        const title = $el.find('h2, h3, h4, .title').first().text().trim();
+        if (!title || title.length < 8 || title.length > 200) return;
+        if (!policyRegex.test(title)) return;
+
+        let url = $el.attr('href') || $el.find('a').attr('href') || '';
+        if (url.startsWith('/')) url = 'https://www.secrss.com' + url;
+
+        const text = $el.text();
+        const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+        const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+        results.push({ title: title.slice(0, 200), summary: '', source_url: url, publish_date: publishDate });
+      } catch (e) { /* skip */ }
+    });
+  }
+
+  const recent = filterRecentResults(dedupe(results), 12);
+  logger.info(`安全内参政策法规过滤：${results.length}条 → 最近12个月${recent.length}条`);
+  return recent;
+}
+
+/**
+ * v7 新增：解析沃通CA新闻页
+ * 沃通(wosign.com)是CA/证书/国密行业核心厂商
+ * HTML结构：.news-list li 或 article 元素
+ */
+function parseWoSignPolicy(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  // 沃通新闻结构：日期 + 标题 + 摘要，列表形式
+  $('li, .news-item, article, .item').each((i, el) => {
+    if (i >= 20) return false;
+    try {
+      const $el = $(el);
+      const title = $el.find('h2, h3, h4, a, .title, strong').first().text().trim();
+      if (!title || title.length < 8 || title.length > 200) return;
+
+      const href = $el.find('a').attr('href') || '';
+      let url = href;
+      if (url.startsWith('/')) url = 'https://www.wosign.com' + url;
+      if (!url.startsWith('http')) url = 'https://www.wosign.com/news/wotrusnews';
+
+      const text = $el.text();
+      const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+      const summary = $el.find('p, .desc, .summary, .content').first().text().trim();
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  // 如果上面选择器没有命中，尝试更宽泛的链接抓取
+  if (results.length === 0) {
+    $('a[href*="news"], a[href*="article"]').each((i, el) => {
+      if (i >= 15) return false;
+      try {
+        const $el = $(el);
+        const title = $el.text().trim().replace(/\s+/g, ' ').split(/\s{2,}/)[0];
+        if (!title || title.length < 8 || title.length > 200) return;
+
+        let url = $el.attr('href') || '';
+        if (url.startsWith('/')) url = 'https://www.wosign.com' + url;
+
+        const dateMatch = $el.closest('li, div, tr').text().match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+        const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+        results.push({ title: title.slice(0, 200), summary: '', source_url: url, publish_date: publishDate });
+      } catch (e) { /* skip */ }
+    });
+  }
+
+  const beforeNoise = results.length;
+  const filtered = filterPolicyNoise(results);
+  logger.info(`沃通CA新闻噪声过滤：${beforeNoise}条 → ${filtered.length}条`);
+
+  const recent = filterRecentResults(dedupe(filtered), 12);
+  logger.info(`沃通CA新闻过滤：${filtered.length}条 → 最近12个月${recent.length}条`);
+  return recent;
+}
+
+/**
+ * v7 新增：解析CFCA新闻动态
+ * CFCA(中金金融认证中心)是金融CA/电子签章核心机构
+ * HTML结构：新闻列表，标题+日期+摘要
+ */
+function parseCFCA(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  // CFCA首页新闻列表结构：标题在 h4/h3 中，日期在同级
+  $('li, .news-item, article, .item, .list-item').each((i, el) => {
+    if (i >= 20) return false;
+    try {
+      const $el = $(el);
+      const title = $el.find('h2, h3, h4, h5, a, .title, strong').first().text().trim();
+      if (!title || title.length < 8 || title.length > 200) return;
+
+      const href = $el.find('a').attr('href') || '';
+      let url = href;
+      if (url.startsWith('/')) url = 'https://www.cfca.com.cn' + url;
+      if (!url.startsWith('http')) url = 'https://www.cfca.com.cn/cfca/listnews.html';
+
+      const text = $el.text();
+      const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+      const summary = $el.find('p, .desc, .summary, .content').first().text().trim();
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  // 备用：从首页提取新闻卡片
+  if (results.length === 0) {
+    $('.news-center a, [class*="news"] a, a[href*="news"], a[href*="detail"]').each((i, el) => {
+      if (i >= 15) return false;
+      try {
+        const $el = $(el);
+        const title = $el.text().trim().replace(/\s+/g, ' ').split(/\s{2,}/)[0];
+        if (!title || title.length < 8 || title.length > 200) return;
+
+        let url = $el.attr('href') || '';
+        if (url.startsWith('/')) url = 'https://www.cfca.com.cn' + url;
+
+        const text = $el.closest('div, li, article').text();
+        const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+        const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+        results.push({ title: title.slice(0, 200), summary: '', source_url: url, publish_date: publishDate });
+      } catch (e) { /* skip */ }
+    });
+  }
+
+  const beforeNoise = results.length;
+  const filtered = filterPolicyNoise(results);
+  logger.info(`CFCA新闻噪声过滤：${beforeNoise}条 → ${filtered.length}条`);
+
+  const recent = filterRecentResults(dedupe(filtered), 12);
+  logger.info(`CFCA新闻动态过滤：${filtered.length}条 → 最近12个月${recent.length}条`);
+  return recent;
+}
+
+/**
+ * v7 新增：解析上海CA(SHECA)新闻页
+ * SHECA(上海市数字证书认证中心)是华东地区核心CA
+ * HTML结构：新闻列表，标题+日期
+ */
+function parseSHECA(html) {
+  const $ = cheerio.load(html);
+  const results = [];
+
+  // 政策相关关键词过滤
+  const policyRegex = /政策|法规|合规|标准|认证|电子签|签名|印章|CA|证书|密码|国密|数据安全|身份|数字|新规|施行|征求意见/;
+
+  $('li, .news-item, article, .item, .list-item').each((i, el) => {
+    if (i >= 20) return false;
+    try {
+      const $el = $(el);
+      const title = $el.find('h2, h3, h4, h5, a, .title, strong').first().text().trim();
+      if (!title || title.length < 8 || title.length > 200) return;
+      // 只保留政策相关
+      if (!policyRegex.test(title + ' ' + ($el.find('p, .desc').first().text().trim() || ''))) return;
+
+      const href = $el.find('a').attr('href') || '';
+      let url = href;
+      if (url.startsWith('/')) url = 'https://www.sheca.com' + url;
+      if (!url.startsWith('http')) url = 'https://www.sheca.com/news';
+
+      const text = $el.text();
+      const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+      const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+      const summary = $el.find('p, .desc, .summary, .content').first().text().trim();
+      results.push({ title: title.slice(0, 200), summary: summary.slice(0, 300), source_url: url, publish_date: publishDate });
+    } catch (e) { /* skip */ }
+  });
+
+  // 备用选择器
+  if (results.length === 0) {
+    $('a[href*="news"], a[href*="detail"], a[href*="article"], .news-list a').each((i, el) => {
+      if (i >= 15) return false;
+      try {
+        const $el = $(el);
+        const title = $el.text().trim().replace(/\s+/g, ' ').split(/\s{2,}/)[0];
+        if (!title || title.length < 8 || title.length > 200) return;
+        if (!policyRegex.test(title)) return;
+
+        let url = $el.attr('href') || '';
+        if (url.startsWith('/')) url = 'https://www.sheca.com' + url;
+
+        const text = $el.closest('li, div, article').text();
+        const dateMatch = text.match(/(20\d{2}[-/]\d{1,2}[-/]\d{1,2})/);
+        const publishDate = dateMatch ? dateMatch[1].replace(/\//g, '-') : null;
+
+        results.push({ title: title.slice(0, 200), summary: '', source_url: url, publish_date: publishDate });
+      } catch (e) { /* skip */ }
+    });
+  }
+
+  const beforeNoise = results.length;
+  const filtered = filterPolicyNoise(results);
+  logger.info(`上海CA新闻噪声过滤：${beforeNoise}条 → ${filtered.length}条`);
+
+  const recent = filterRecentResults(dedupe(filtered), 12);
+  logger.info(`上海CA新闻过滤：${filtered.length}条 → 最近12个月${recent.length}条`);
+  return recent;
+}
+
 // ====== 采集函数 ======
 
 function classifySubCategory(title, summary) {
@@ -531,7 +808,7 @@ async function fetchPageWithRetry(url, maxRetries = 3) {
 }
 
 async function collectPolicy() {
-  logger.info('开始采集政策法规情报（v5 多源+公众号+噪声过滤+去重增强+信号调优）...');
+  logger.info('开始采集政策法规情报（v7 多源+公众号+噪声过滤+去重增强+信号调优+CA行业源+安全内参）...');
   let totalCount = 0;
   const today = beijingDate();
 
