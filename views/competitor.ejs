@@ -5,6 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>竞品动态 - IntelliSign Radar</title>
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .comp-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .comp-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); text-align: center; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+    .comp-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .comp-card.active { border: 2px solid var(--primary); }
+    .comp-card-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .comp-card-cnt { font-size: 28px; font-weight: 700; }
+    .comp-card-date { font-size: 11px; color: #5f6368; margin-top: 4px; }
+    .item-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; transition: box-shadow .15s; }
+    .item-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .item-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .item-title { font-size: 14px; font-weight: 600; line-height: 1.4; flex: 1; }
+    .item-meta { font-size: 12px; color: #5f6368; display: flex; gap: 10px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+    .item-summary { font-size: 13px; color: #424242; line-height: 1.6; margin-top: 6px; }
+    .item-actions { display: flex; gap: 6px; margin-left: 8px; flex-shrink: 0; }
+    .icon-btn { background: none; border: none; cursor: pointer; padding: 4px; font-size: 16px; opacity: 0.5; transition: opacity .15s; }
+    .icon-btn:hover { opacity: 1; }
+    .icon-btn.starred { opacity: 1; color: #f9ab00; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .tag-high { background: #fce8e6; color: #ea4335; }
+    .tag-medium { background: #fef7e0; color: #e37400; }
+    .tag-info { background: #e8f0fe; color: #1a73e8; }
+    .tag-cat { background: #f1f3f4; color: #5f6368; }
+    .tag-source { background: #e6f4ea; color: #137333; }
+    .tag-layer { background: #f3e8fd; color: #7627b3; }
+  </style>
 </head>
 <body>
   <aside class="sidebar">
@@ -18,26 +44,39 @@
       <a href="/collect-logs" class="nav-item">采集日志</a>
       <a href="/settings" class="nav-item">系统设置</a>
     </nav>
-    <div class="sidebar-footer"><small>IntelliSign Radar v1.0</small></div>
+    <div class="sidebar-footer"><small>IntelliSign Radar v2.1</small></div>
   </aside>
   <main class="main-content">
     <header class="page-header">
       <h1>竞品动态监控</h1>
       <div class="header-actions">
         <button class="btn btn-primary" onclick="triggerCollect('competitor')">采集竞品动态</button>
+        <button class="btn btn-outline" onclick="exportCSV('competitor')">导出CSV</button>
       </div>
     </header>
+
+    <!-- 竞品速览卡片 -->
+    <div class="comp-cards" id="compCards"></div>
+
     <div class="filter-bar">
-      <select id="filterCompetitor" onchange="loadCompetitor()">
+      <select id="filterCompetitor" onchange="loadCompetitorV2()">
         <option value="">全部竞品</option>
         <option value="E签宝">E签宝</option>
         <option value="法大大">法大大</option>
         <option value="契约锁">契约锁</option>
         <option value="腾讯电子签">腾讯电子签</option>
       </select>
-      <select id="sortBy" onchange="loadCompetitor()">
+      <input type="text" id="filterKeyword" placeholder="搜索标题/摘要..." onkeyup="if(event.key==='Enter')loadCompetitorV2()" style="width:240px">
+      <button class="btn btn-sm" onclick="loadCompetitorV2()">搜索</button>
+      <select id="sortBy" onchange="loadCompetitorV2()">
         <option value="collect">按采集时间</option>
         <option value="publish">按发布时间</option>
+      </select>
+      <select id="filterSeverity" onchange="loadCompetitorV2()">
+        <option value="">全部信号</option>
+        <option value="high">高信号</option>
+        <option value="medium">中信号</option>
+        <option value="info">低信号</option>
       </select>
     </div>
     <div class="card">
@@ -45,6 +84,135 @@
     </div>
   </main>
   <script src="/js/app.js"></script>
-  <script>loadCompetitor();</script>
+  <script>
+  const compColors = { 'E签宝': '#ea4335', '法大大': '#1a73e8', '契约锁': '#f9ab00', '腾讯电子签': '#34a853' };
+  let compStats = {};
+
+  async function loadCompCards() {
+    const data = await api('/stats');
+    if (!data || !data.competitorBreakdown) return;
+    compStats = {};
+    data.competitorBreakdown.forEach(c => compStats[c.competitor_name] = c.cnt);
+
+    // 最新日期
+    const latestDate = {};
+    if (data.allCompetitors) {
+      data.allCompetitors.forEach(c => {
+        if (!latestDate[c.competitor_name] || c.publish_date > latestDate[c.competitor_name]) {
+          latestDate[c.competitor_name] = c.publish_date;
+        }
+      });
+    }
+
+    const el = document.getElementById('compCards');
+    el.innerHTML = ['E签宝','法大大','契约锁','腾讯电子签'].map(name => {
+      const cnt = compStats[name] || 0;
+      const color = compColors[name] || '#7b61ff';
+      const date = latestDate[name] || '-';
+      return `<div class="comp-card" onclick="filterByComp('${name}')" style="border-top:3px solid ${color}">
+        <div class="comp-card-name" style="color:${color}">${name}</div>
+        <div class="comp-card-cnt" style="color:${color}">${cnt}</div>
+        <div class="comp-card-date">最新: ${date}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function filterByComp(name) {
+    document.getElementById('filterCompetitor').value = name;
+    loadCompetitorV2();
+  }
+
+  async function loadCompetitorV2() {
+    const name = document.getElementById('filterCompetitor')?.value || '';
+    const keyword = document.getElementById('filterKeyword')?.value || '';
+    const sortBy = document.getElementById('sortBy')?.value || 'collect';
+    const severity = document.getElementById('filterSeverity')?.value || '';
+    let url = `/competitors?pageSize=100&sortBy=${sortBy}`;
+    if (name) url += `&name=${encodeURIComponent(name)}`;
+    const data = await api(url);
+    if (!data) return;
+
+    let items = data.data || [];
+
+    // 前端关键词过滤
+    if (keyword) {
+      const kw = keyword.toLowerCase();
+      items = items.filter(i => (i.title||'').toLowerCase().includes(kw) || (i.summary||'').toLowerCase().includes(kw));
+    }
+    // 前端信号过滤
+    if (severity) {
+      items = items.filter(i => i.severity === severity);
+    }
+
+    const el = document.getElementById('competitorList');
+    if (items.length > 0) {
+      el.innerHTML = items.map(i => {
+        const sevClass = i.severity === 'high' ? 'tag-high' : i.severity === 'medium' ? 'tag-medium' : 'tag-info';
+        const sevLabel = i.severity === 'high' ? '高' : i.severity === 'medium' ? '中' : '观察';
+        return `<div class="item-card">
+          <div class="item-header">
+            <div class="item-title">
+              <span class="tag ${sevClass}">${sevLabel}</span>
+              <span class="tag tag-cat">${escHtml(i.category||'')}</span>
+              <span class="tag tag-source" style="background:${compColors[i.competitor_name]||'#eee'}20;color:${compColors[i.competitor_name]||'#333'}">${escHtml(i.competitor_name)}</span>
+              ${escHtml(i.title)}
+            </div>
+            <div class="item-actions">
+              <button class="icon-btn ${i.is_starred?'starred':''}" onclick="toggleStar('competitor','${i.id}',this)" title="收藏">&#9733;</button>
+            </div>
+          </div>
+          <div class="item-meta">
+            <span>${formatDate(i.publish_date)}</span>
+            <span>${i.source_name || ''}</span>
+          </div>
+          ${i.summary ? `<div class="item-summary">${escHtml(i.summary.slice(0,200))}${i.summary.length>200?'...':''}</div>` : ''}
+        </div>`;
+      }).join('');
+    } else {
+      el.innerHTML = '<p class="empty-text">暂无数据，请点击"采集竞品动态"</p>';
+    }
+  }
+
+  function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  async function toggleStar(type, id, btn) {
+    const data = await api(`/${type === 'competitor' ? 'competitors' : 'partners'}/${id}`);
+    if (!data) return;
+    const newStar = data.is_starred ? 0 : 1;
+    await api(`/${type === 'competitor' ? 'competitors' : 'partners'}/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_starred: newStar })
+    });
+    btn.classList.toggle('starred');
+  }
+
+  function exportCSV(type) {
+    const list = document.getElementById(type === 'competitor' ? 'competitorList' : 'partnerList');
+    // 从API重新获取完整数据
+    const name = document.getElementById('filterCompetitor')?.value || '';
+    let url = `/competitors?pageSize=999&sortBy=publish`;
+    if (name) url += `&name=${encodeURIComponent(name)}`;
+    api(url).then(data => {
+      if (!data || !data.data) return;
+      const header = '竞品名称,标题,摘要,发布日期,采集日期,分类,信号级别\n';
+      const rows = data.data.map(i => 
+        `"${i.competitor_name||''}","${(i.title||'').replace(/"/g,'""')}","${(i.summary||'').replace(/"/g,'""').slice(0,200)}","${i.publish_date||''}","${i.collect_date||''}","${i.category||''}","${i.severity||''}"`
+      ).join('\n');
+      const blob = new Blob(['\ufeff' + header + rows], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `竞品动态_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      showToast('CSV已导出', 'success');
+    });
+  }
+
+  loadCompCards();
+  loadCompetitorV2();
+  </script>
 </body>
 </html>
