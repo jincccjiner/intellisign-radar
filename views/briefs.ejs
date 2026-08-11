@@ -5,6 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>情报简报 - IntelliSign Radar</title>
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .brief-header { background: linear-gradient(135deg, #1a237e 0%, #283593 100%); color: #fff; padding: 32px 28px; border-radius: 8px; margin-bottom: 20px; }
+    .brief-header h1 { margin: 0 0 4px; font-size: 22px; font-weight: 700; }
+    .brief-header .sub { font-size: 13px; opacity: 0.85; margin-bottom: 12px; }
+    .brief-header .meta-row { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; opacity: 0.75; }
+    .tldr-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+    .tldr-table th { background: #e8eaf6; padding: 8px 10px; text-align: left; font-weight: 600; border-bottom: 2px solid #c5cae9; }
+    .tldr-table td { padding: 7px 10px; border-bottom: 1px solid #e0e0e0; }
+    .tldr-table tr:hover td { background: #f5f5f5; }
+    .signal-high { color: #c62828; font-weight: 700; }
+    .signal-medium { color: #f57f17; font-weight: 600; }
+    .signal-observe { color: #757575; }
+    .layer-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; background: #e3f2fd; color: #1565c0; }
+    .section-title { font-size: 18px; font-weight: 700; color: #1a237e; margin: 28px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #c5cae9; }
+    .intel-item { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; margin-bottom: 12px; }
+    .intel-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .intel-title { font-size: 14px; font-weight: 600; color: #212121; margin-bottom: 6px; }
+    .intel-meta { display: flex; gap: 10px; align-items: center; font-size: 12px; color: #757575; margin-bottom: 8px; }
+    .intel-summary { font-size: 13px; color: #424242; line-height: 1.6; margin-bottom: 8px; }
+    .intel-insights { background: #fff8e1; border-left: 3px solid #f9a825; padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 13px; line-height: 1.7; }
+    .intel-insights strong { color: #e65100; }
+    .opp-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+    .opp-table th { background: #fce4ec; padding: 8px 10px; text-align: left; font-weight: 600; border-bottom: 2px solid #ef9a9a; }
+    .opp-table td { padding: 7px 10px; border-bottom: 1px solid #e0e0e0; vertical-align: top; }
+    .opp-table tr:hover td { background: #fff3e0; }
+    .suggestion-item { background: #e8f5e9; padding: 12px 16px; border-radius: 6px; margin-bottom: 8px; }
+    .suggestion-item .topic { font-weight: 600; font-size: 14px; color: #2e7d32; }
+    .suggestion-item .angle { font-size: 13px; color: #555; margin-top: 4px; }
+    .methodology-box { background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; font-size: 12px; color: #616161; line-height: 1.8; }
+    .methodology-box table { width: 100%; border-collapse: collapse; }
+    .methodology-box td { padding: 4px 8px; border-bottom: 1px solid #e0e0e0; }
+    .brief-card { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 16px; }
+    .brief-list-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #f1f3f4; cursor: pointer; }
+    .brief-list-item:hover { background: #f8f9fa; }
+    .brief-list-item:last-child { border-bottom: none; }
+    .btn-row { display: flex; gap: 8px; }
+  </style>
 </head>
 <body>
   <aside class="sidebar">
@@ -18,24 +55,205 @@
       <a href="/collect-logs" class="nav-item">采集日志</a>
       <a href="/settings" class="nav-item">系统设置</a>
     </nav>
-    <div class="sidebar-footer"><small>IntelliSign Radar v1.0</small></div>
+    <div class="sidebar-footer"><small>IntelliSign Radar v2.0</small></div>
   </aside>
   <main class="main-content">
     <header class="page-header">
       <h1>情报简报</h1>
-      <div class="header-actions">
-        <button class="btn btn-primary" onclick="generateBrief()">生成周报</button>
+      <div class="header-actions btn-row">
+        <button class="btn btn-primary" onclick="generateBrief('daily')">生成日报</button>
+        <button class="btn" onclick="generateBrief('weekly')">生成周报</button>
       </div>
     </header>
-    <div class="card">
-      <div class="card-body" id="briefsList"><p class="empty-text">加载中...</p></div>
+    <div class="brief-card">
+      <div id="briefsList" style="padding:0"><p class="empty-text" style="padding:20px">加载中...</p></div>
     </div>
-    <div class="card" style="margin-top:16px;display:none" id="briefDetail">
-      <div class="card-header"><h2 id="briefDetailTitle">简报详情</h2><button class="btn btn-sm" onclick="closeBriefDetail()">关闭</button></div>
-      <div class="card-body brief-content" id="briefDetailBody"></div>
-    </div>
+    <div id="briefDetail" style="display:none"></div>
   </main>
   <script src="/js/app.js"></script>
   <script>loadBriefs();</script>
+
+  <script>
+  // ====== 增强版简报渲染 ======
+
+  function renderBriefV2(b) {
+    let data;
+    try { data = JSON.parse(b.content); } catch (e) {
+      return '<p style="padding:20px;color:#999">旧版简报格式，请重新生成</p>';
+    }
+
+    // 兼容旧版格式
+    if (Array.isArray(data)) return renderLegacyBrief(data);
+
+    let html = '';
+
+    // === Header ===
+    html += `<div class="brief-header">
+      <h1>${data.meta.title_en || 'IntelliSign Radar Daily Brief'}</h1>
+      <div class="sub">${data.meta.title_cn || b.title}</div>
+      <div class="meta-row">
+        <span>出品：${data.meta.producer || 'IntelliSign Radar'}</span>
+        <span>五层情报体系（${data.meta.layers || ''}）</span>
+        <span>情报源规模：${data.methodology?.source_total || 0} 条</span>
+        <span>信号分级：[高] 需本周动作｜[中] 需纳入规划｜[观察] 存档观察</span>
+      </div>
+    </div>`;
+
+    // === TL;DR ===
+    if (data.tldr && data.tldr.length > 0) {
+      html += `<h2 class="section-title">&#9889; 今日速览（TL;DR）</h2>`;
+      html += '<table class="tldr-table"><tr><th>#</th><th>事项</th><th>层级</th><th>信号</th></tr>';
+      for (const row of data.tldr) {
+        const sigClass = row.signal === '[高]' ? 'signal-high' : row.signal === '[中]' ? 'signal-medium' : 'signal-observe';
+        html += `<tr><td>${row['#']}</td><td>${row.item}</td><td><span class="layer-badge">${row.layer}</span></td><td class="${sigClass}">${row.signal}</td></tr>`;
+      }
+      html += '</table>';
+    }
+
+    // === Sections ===
+    for (const sec of (data.sections || [])) {
+      if (!sec.items || sec.items.length === 0) continue;
+      html += `<h2 class="section-title">${sec.title}</h2>`;
+      for (const item of sec.items) {
+        const sigClass = item.signal === '高' ? 'signal-high' : item.signal === '中' ? 'signal-medium' : 'signal-observe';
+        html += '<div class="intel-item">';
+        html += `<div class="intel-title"><span class="${sigClass}">[${item.signal}]</span> ${escHtml(item.title)}</div>`;
+        html += `<div class="intel-meta">
+          <span class="layer-badge">${item.layer}</span>
+          ${item.competitor_name ? `<span>${escHtml(item.competitor_name)}</span>` : ''}
+          ${item.partner_name ? `<span>${escHtml(item.partner_name)}</span>` : ''}
+          <span>${item.publish_date || ''}</span>
+        </div>`;
+        if (item.summary) {
+          html += `<div class="intel-summary">${escHtml(item.summary)}</div>`;
+        }
+        if (item.insights && item.insights.length > 0) {
+          html += `<div class="intel-insights"><strong>&#128161; 启示：</strong><br>${item.insights.map(i => '① ' + escHtml(i)).join('<br>')}</div>`;
+        }
+        html += '</div>';
+      }
+    }
+
+    // === 商机提醒 ===
+    if (data.opportunity_alerts && data.opportunity_alerts.length > 0) {
+      html += '<h2 class="section-title">&#128640; 商机提醒 Opportunity Alerts</h2>';
+      html += '<table class="opp-table"><tr><th>优先级</th><th>商机</th><th>依据</th><th>建议动作</th><th>时限</th></tr>';
+      for (const a of data.opportunity_alerts) {
+        html += `<tr><td class="signal-high">${escHtml(a.priority)}</td><td>${escHtml(a.title)}</td><td style="font-size:12px">${escHtml(a.basis)}</td><td>${escHtml(a.action)}</td><td>${escHtml(a.deadline)}</td></tr>`;
+      }
+      html += '</table>';
+    }
+
+    // === 内容建议 ===
+    if (data.content_suggestions && data.content_suggestions.length > 0) {
+      html += '<h2 class="section-title">&#9998; 今日内容建议 Content Suggestions</h2>';
+      for (const s of data.content_suggestions) {
+        html += `<div class="suggestion-item">
+          <div class="topic">${escHtml(s.topic)}</div>
+          <div class="angle">切入点：${escHtml(s.angle)}</div>
+          <div style="font-size:12px;color:#888;margin-top:4px">建议平台：${escHtml(s.platform)}</div>
+        </div>`;
+      }
+    }
+
+    // === 方法论 ===
+    if (data.methodology) {
+      html += '<h2 class="section-title">&#128218; 方法论与数据透明度 Methodology & Transparency</h2>';
+      html += '<div class="methodology-box">';
+      html += '<table>';
+      html += `<tr><td>运行时间</td><td>${data.methodology.run_time || ''}</td></tr>`;
+      html += `<tr><td>情报源总数</td><td>${data.methodology.source_total || 0} 条</td></tr>`;
+      html += `<tr><td>信号分布</td><td>[高] ${data.methodology.signal_distribution?.high || 0}｜[中] ${data.methodology.signal_distribution?.medium || 0}｜[观察] ${data.methodology.signal_distribution?.observe || 0}</td></tr>`;
+      html += `<tr><td>覆盖层级</td><td>${(data.methodology.layers_covered || []).join(' / ')}</td></tr>`;
+      html += `<tr><td>备注</td><td>${data.methodology.note || ''}</td></tr>`;
+      html += '</table></div>';
+    }
+
+    html += `<p style="text-align:center;color:#999;font-size:12px;margin-top:32px">*本简报由 IntelliSign Radar AI 情报中心自动生成 ${b.period_end}*</p>`;
+
+    return html;
+  }
+
+  function renderLegacyBrief(sections) {
+    let html = '';
+    for (const sec of sections) {
+      html += `<h3>${sec.title}（${sec.count} 条）</h3>`;
+      if (sec.items) {
+        html += '<ul>' + sec.items.map(i => `<li>${escHtml(i.title)}${i.summary ? ' - ' + escHtml(i.summary) : ''}</li>`).join('') + '</ul>';
+      }
+      if (sec.groups) {
+        for (const [name, items] of Object.entries(sec.groups)) {
+          html += `<p><strong>${escHtml(name)}：</strong></p><ul>` + items.map(i => `<li>${escHtml(i.title)}</li>`).join('') + '</ul>';
+        }
+      }
+    }
+    return html;
+  }
+
+  function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Override viewBrief to use V2 renderer
+  async function viewBriefV2(id) {
+    const b = await api('/briefs/' + id);
+    if (!b || !b.content) return;
+
+    const html = renderBriefV2(b);
+    const container = document.getElementById('briefDetail');
+    container.innerHTML = `<div style="background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,0.08);padding:24px;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 style="margin:0;font-size:18px">${escHtml(b.title)}</h2>
+        <button class="btn btn-sm" onclick="closeBriefDetail()">关闭</button>
+      </div>
+      ${html}
+    </div>`;
+    container.style.display = 'block';
+    container.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function closeBriefDetail() {
+    document.getElementById('briefDetail').style.display = 'none';
+  }
+
+  // Override generateBrief to support daily/weekly
+  async function generateBrief(type) {
+    const endpoint = type === 'daily' ? '/generate-brief-daily' : '/generate-brief';
+    showToast(`正在生成${type === 'daily' ? '日报' : '周报'}...`);
+    const result = await api(endpoint, { method: 'POST' });
+    if (result && result.success) {
+      showToast(`${type === 'daily' ? '日报' : '周报'}生成完成`, 'success');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      showToast('生成失败: ' + (result?.error || '未知错误'), 'error');
+    }
+  }
+
+  // Override loadBriefs to use V2 viewer
+  async function loadBriefs() {
+    const data = await api('/briefs');
+    if (!data) return;
+
+    const el = document.getElementById('briefsList');
+    if (data.data && data.data.length > 0) {
+      el.innerHTML = data.data.map(b => `
+        <div class="brief-list-item" onclick="viewBriefV2('${b.id}')">
+          <div>
+            <div style="font-weight:600;font-size:14px">${escHtml(b.title)}</div>
+            <div style="font-size:12px;color:#888;margin-top:2px">
+              <span>${b.period_start} ~ ${b.period_end}</span>
+              <span class="category-badge" style="margin-left:8px">${b.category === 'weekly' ? '周报' : '日报'}</span>
+              <span class="category-badge" style="margin-left:4px">${b.status}</span>
+            </div>
+          </div>
+          <div style="color:#999;font-size:12px">${b.created_at ? b.created_at.replace('T',' ').slice(0,16) : ''}</div>
+        </div>
+      `).join('');
+    } else {
+      el.innerHTML = '<p class="empty-text" style="padding:20px">暂无简报，请点击"生成日报"或"生成周报"</p>';
+    }
+  }
+  </script>
 </body>
 </html>
