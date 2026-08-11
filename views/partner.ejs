@@ -63,6 +63,7 @@
         <option value="天威诚信">天威诚信</option>
         <option value="蓝凌">蓝凌</option>
         <option value="立约笔">立约笔</option>
+        <option value="e签宝生态">e签宝生态</option>
       </select>
       <input type="text" id="filterKeyword" placeholder="搜索标题/摘要..." onkeyup="if(event.key==='Enter')loadPartnerV2()" style="width:240px">
       <button class="btn btn-sm" onclick="loadPartnerV2()">搜索</button>
@@ -86,7 +87,7 @@
     data.partnerBreakdown.forEach(c => partnerStats[c.partner_name] = c.cnt);
 
     const el = document.getElementById('partnerCards');
-    const allPartners = ['安证通', '法大大生态', '天威诚信', '蓝凌', '立约笔'];
+    const allPartners = ['安证通', '法大大生态', '天威诚信', '蓝凌', '立约笔', 'e签宝生态'];
     el.innerHTML = allPartners.map(name => {
       const cnt = partnerStats[name] || 0;
       return `<div class="partner-card" onclick="filterByPartner('${name}')">
@@ -134,6 +135,7 @@
           </div>
           <div class="item-meta">
             <span>${formatDate(i.publish_date)}</span>
+            ${i.source_name ? `<span class="tag tag-source">${escHtml(i.source_name)}</span>` : ''}
           </div>
           ${i.summary ? `<div class="item-summary">${escHtml(i.summary.slice(0,200))}${i.summary.length>200?'...':''}</div>` : ''}
         </div>
